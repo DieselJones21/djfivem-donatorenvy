@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS `dj_envydonator_logs` (
 
 CREATE TABLE IF NOT EXISTS `dj_envydonator_codes` (
     `id` INT NOT NULL AUTO_INCREMENT,
-    `code` VARCHAR(32) NOT NULL,
+    `code` VARCHAR(64) NOT NULL,
     `coins` INT NOT NULL DEFAULT 0,
     `item_id` VARCHAR(64) DEFAULT NULL,
     `max_uses` INT NOT NULL DEFAULT 1,

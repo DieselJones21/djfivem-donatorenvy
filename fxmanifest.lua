@@ -4,8 +4,8 @@ lua54 'yes'
 
 name 'djfivem-donatorenvy'
 author 'DieselJones21'
-description 'Envy Roleplay donator store with Envy Coins, cyan/chrome NUI, Tebex grants, ox_inventory, and JG garages'
-version '1.7.0'
+description 'Envy Roleplay donator store with Gems, Tebex TBX redeem, Discord gang tab, ox_inventory, and JG garages'
+version '1.8.0'
 
 shared_scripts {
     'config.lua',
@@ -30,6 +30,7 @@ server_scripts {
     'server/webhooks.lua',
     'server/database.lua',
     'server/listings.lua',
+    'server/discord.lua',
     'server/callbacks.lua',
     'server/main.lua',
 }

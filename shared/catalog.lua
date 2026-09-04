@@ -1,18 +1,19 @@
 --[[
     Live shop catalog. Built-in listings are empty on purpose — admins add
-    vehicles, weapons, extras, bundles, pets, exclusives, and limited drops
+    vehicles, weapons, extras, bundles, gangs, exclusives, and limited drops
     in-game from the Admin tab (stored in dj_envydonator_listings).
 ]]
 
 function CatalogReset()
     Catalog = {
         vehicles = EmptyTierBuckets(),
-        weapons = EmptyTierBuckets(),
+        weapons = {},
         extras = {},
         bundles = {},
         pets = {},
         exclusives = {},
         limited = {},
+        gangs = {},
     }
 end
 
@@ -30,14 +31,15 @@ function CatalogPut(item)
             Catalog.vehicles[tier] = {}
         end
         Catalog.vehicles[tier][#Catalog.vehicles[tier] + 1] = item
-    elseif category == 'weapons' then
-        local tier = NormalizeTier(item.tier)
-        item.tier = tier
-        if not Catalog.weapons[tier] then
-            Catalog.weapons[tier] = {}
-        end
-        Catalog.weapons[tier][#Catalog.weapons[tier] + 1] = item
-    elseif Catalog[category] then
+        return
+    end
+    if category == 'weapons' then
+        item.tier = nil
+        Catalog.weapons = Catalog.weapons or {}
+        Catalog.weapons[#Catalog.weapons + 1] = item
+        return
+    end
+    if Catalog[category] then
         Catalog[category][#Catalog[category] + 1] = item
     else
         Catalog.extras[#Catalog.extras + 1] = item
@@ -62,13 +64,14 @@ function CatalogAll()
     end
     for _, tier in ipairs(Tiers.ids) do
         take(Catalog.vehicles[tier], 'vehicles', tier)
-        take(Catalog.weapons[tier], 'weapons', tier)
     end
+    take(Catalog.weapons, 'weapons')
     take(Catalog.extras, 'extras')
     take(Catalog.bundles, 'bundles')
     take(Catalog.pets, 'pets')
     take(Catalog.exclusives, 'exclusives')
     take(Catalog.limited, 'limited')
+    take(Catalog.gangs, 'gangs')
     return out
 end
 

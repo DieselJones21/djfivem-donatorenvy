@@ -23,7 +23,31 @@ function Images.IsConfigured()
     return base ~= '' and not base:find('YOUR_TEAM', 1, true) and not base:find('PASTE_', 1, true)
 end
 
--- Filename key on Fivemanage: sultan.webp, weapon_pistol.webp, armour.webp, pet_husky.webp
+function Images.OxBase()
+    local path = (Config.OxInventory and Config.OxInventory.imagePath) or 'nui://ox_inventory/web/images'
+    return trimSlash(path)
+end
+
+function Images.OxPath(key)
+    if not key then
+        return nil
+    end
+    return ('%s/%s.png'):format(Images.OxBase(), Images.FileName(key))
+end
+
+function Images.IsWeapon(itemOrKey)
+    if type(itemOrKey) ~= 'table' then
+        local name = tostring(itemOrKey or '')
+        return name:upper():find('^WEAPON_') ~= nil
+    end
+    if itemOrKey.category == 'weapons' or itemOrKey.weapon then
+        return true
+    end
+    local name = itemOrKey.item or itemOrKey.imageKey or ''
+    return type(name) == 'string' and name:upper():find('^WEAPON_') ~= nil
+end
+
+-- Filename key on Fivemanage: sultan.webp, armour.webp
 function Images.Key(itemOrKey)
     if type(itemOrKey) == 'table' then
         if itemOrKey.imageKey and itemOrKey.imageKey ~= '' then
@@ -70,11 +94,29 @@ function Images.Build(key)
     return ('%s/%s.%s'):format(trimSlash(Config.Images.baseUrl), Images.FileName(key), ext)
 end
 
--- Prefer Config.Images.urls, then an explicit catalog URL, then Fivemanage baseUrl + key.
--- docs.fivem.net / ox nui paths are treated as fallbacks so a configured Fivemanage folder wins.
+local function explicitUrl(item, itemOrKey)
+    local explicit = item and item.image
+    if Images.IsUrl(explicit) and not isAutoFallback(explicit) then
+        return explicit
+    end
+    if Images.IsUrl(itemOrKey) and not isAutoFallback(itemOrKey) then
+        return itemOrKey
+    end
+end
+
+-- Weapons: ox_inventory/web/images.
+-- Everything else: Fivemanage first, then ox_inventory, then vehicle docs.fivem.net.
 function Images.Resolve(itemOrKey, fallback)
     local item = type(itemOrKey) == 'table' and itemOrKey or nil
     local key = Images.Key(itemOrKey)
+    local custom = explicitUrl(item, itemOrKey)
+
+    if Images.IsWeapon(itemOrKey) then
+        if custom then
+            return custom
+        end
+        return Images.OxPath(item and (item.weapon or item.item or key) or key) or fallback
+    end
 
     local mapped = Images.FromMap(key)
     if mapped then
@@ -87,12 +129,8 @@ function Images.Resolve(itemOrKey, fallback)
         end
     end
 
-    local explicit = item and item.image
-    if Images.IsUrl(explicit) and not isAutoFallback(explicit) then
-        return explicit
-    end
-    if Images.IsUrl(itemOrKey) and not isAutoFallback(itemOrKey) then
-        return itemOrKey
+    if custom then
+        return custom
     end
 
     local built = Images.Build(key)
@@ -100,8 +138,17 @@ function Images.Resolve(itemOrKey, fallback)
         return built
     end
 
-    if Images.IsUrl(explicit) then
-        return explicit
+    local ox = Images.OxPath(key)
+    if ox then
+        return ox
+    end
+
+    if item and item.model and type(Config.VehicleImage) == 'function' then
+        return Config.VehicleImage(item.model)
+    end
+
+    if Images.IsUrl(item and item.image) then
+        return item.image
     end
     if Images.IsUrl(itemOrKey) then
         return itemOrKey
@@ -110,5 +157,8 @@ function Images.Resolve(itemOrKey, fallback)
 end
 
 function Images.ForGrant(itemName, catalogItem)
-    return Images.Resolve(itemName) or (catalogItem and Images.Resolve(catalogItem)) or nil
+    if catalogItem and Images.IsWeapon(catalogItem) then
+        return Images.OxPath(itemName or catalogItem.weapon or catalogItem.item)
+    end
+    return Images.Resolve(itemName) or (catalogItem and Images.Resolve(catalogItem)) or Images.OxPath(itemName)
 end

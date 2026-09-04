@@ -140,11 +140,12 @@ function OxInv.DecoratePublic(pub, raw)
     for i = 1, #grants do
         local resolved, data, image = OxInv.Describe(grants[i].name)
         local fm = Images.ForGrant(grants[i].name, raw)
+        local grantImage = Images.IsWeapon(raw) and (image or fm) or (fm or image)
         pub.ox.grants[#pub.ox.grants + 1] = {
             name = resolved or grants[i].name,
             count = grants[i].count,
             label = data and data.label or grants[i].name,
-            image = fm or image,
+            image = grantImage,
             weight = data and data.weight or 0,
             registered = resolved ~= nil,
         }
@@ -152,9 +153,11 @@ function OxInv.DecoratePublic(pub, raw)
             pub.ox.registered = false
         end
     end
-    local fmItem = Images.Resolve(raw)
-    if fmItem then
-        pub.image = fmItem
+    local resolvedImage = Images.Resolve(raw)
+    if Images.IsWeapon(raw) then
+        pub.image = (pub.ox.grants[1] and pub.ox.grants[1].image) or resolvedImage or pub.image
+    elseif resolvedImage then
+        pub.image = resolvedImage
     elseif (not pub.image or pub.image == '') and pub.ox.grants[1] and pub.ox.grants[1].image then
         pub.image = pub.ox.grants[1].image
     end

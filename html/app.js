@@ -8,6 +8,7 @@ const ICONS = {
     extras: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12h8M12 8v8"/></svg>',
     bundles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>',
     pets: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="8" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="17" cy="8" r="2"/><path d="M6 14c1.5-2 10.5-2 12 0M8 18c2 2 6 2 8 0"/></svg>',
+    gangs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7l7-4z"/><path d="M9 12h6"/></svg>',
     exclusives: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3z"/></svg>',
     limited: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>',
     inventory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v12H4zM8 7V5h8v2"/></svg>',
@@ -22,7 +23,7 @@ const TABS = [
     { id: 'weapons', label: 'Weapons' },
     { id: 'extras', label: 'Extra Items' },
     { id: 'bundles', label: 'Bundles' },
-    { id: 'pets', label: 'Pets' },
+    { id: 'gangs', label: 'Gang Store', gang: true },
     { id: 'exclusives', label: 'City Exclusives' },
     { id: 'limited', label: 'Limited Time' },
     { id: 'inventory', label: 'Inventory' },
@@ -63,22 +64,25 @@ const state = {
     admin: { players: [], logs: [], codes: [], listings: [] },
     lookup: null,
     players: [],
-    currency: { name: 'Envy Coins', short: 'EC' },
+    currency: { name: 'Gems', short: 'Gems' },
     serverName: 'Envy Roleplay',
     keybind: 'F11',
     locale: {},
     theme: 'envy',
+    isGangMember: false,
+    gangTabLabel: 'Gang Store',
 };
 
 function emptyCatalog() {
     return {
         vehicles: { emerald: [], sapphire: [], blackdiamond: [] },
-        weapons: { emerald: [], sapphire: [], blackdiamond: [] },
+        weapons: [],
         extras: [],
         bundles: [],
         pets: [],
         exclusives: [],
         limited: [],
+        gangs: [],
     };
 }
 
@@ -89,9 +93,8 @@ function putListing(catalog, item) {
         catalog.vehicles[tier] = catalog.vehicles[tier] || [];
         catalog.vehicles[tier].push(copy);
     } else if (item.category === 'weapons') {
-        const tier = normalizeTier(item.tier);
-        catalog.weapons[tier] = catalog.weapons[tier] || [];
-        catalog.weapons[tier].push(copy);
+        if (!Array.isArray(catalog.weapons)) catalog.weapons = [];
+        catalog.weapons.push(copy);
     } else if (catalog[item.category]) {
         catalog[item.category].push(copy);
     } else {
@@ -124,8 +127,9 @@ function previewCatalog() {
             description: 'Black Diamond donor car delivered to your garage.', price: 8750, remaining: 8,
         }),
         decoratePreviewItem({
-            id: 'wep_pistol', category: 'weapons', tier: 'emerald', label: 'Combat Pistol',
+            id: 'wep_pistol', category: 'weapons', label: 'Combat Pistol',
             description: 'Sidearm grant with ammo.', price: 2450, remaining: 18, item: 'WEAPON_PISTOL', weapon: 'WEAPON_PISTOL',
+            image: 'nui://ox_inventory/web/images/weapon_pistol.png',
         }),
         decoratePreviewItem({
             id: 'ext_armour', category: 'extras', label: 'Armour Pack',
@@ -136,26 +140,30 @@ function previewCatalog() {
             description: 'Armour, bandages, and lockpicks in one package.', price: 250, remaining: 6,
             extras: [{ item: 'armour', count: 5 }, { item: 'bandage', count: 10 }, { item: 'lockpick', count: 2 }],
         }),
+        decoratePreviewItem({
+            id: 'gang_switch', category: 'gangs', label: 'Gang Switchblade',
+            description: 'Gang-only sidearm. Visible only to Discord gang roles.', price: 1200, item: 'WEAPON_SWITCHBLADE', weapon: 'WEAPON_SWITCHBLADE',
+        }),
     ].forEach((item) => putListing(catalog, item));
     return catalog;
 }
 
 function mockNormalizeListing(data) {
     const category = data.category || 'extras';
-    const label = String(data.label || '').trim();
-    const price = Number(data.price);
-    if (!label) return { ok: false, message: 'Enter a display name.' };
-    if (!Number.isFinite(price) || price < 0) return { ok: false, message: 'Enter a valid price.' };
     const itemName = String(data.itemName || data.item || '').trim();
     const model = String(data.model || '').trim();
+    const pretty = (value) => String(value || '').replace(/^WEAPON_/i, '').replace(/[_-]+/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+    const label = String(data.label || '').trim() || pretty(model || itemName);
+    const price = Number(data.price);
+    if (!label) return { ok: false, message: 'Enter a display name, spawn name, or ox item name.' };
+    if (!Number.isFinite(price) || price < 0) return { ok: false, message: 'Enter a valid price.' };
     const petModel = String(data.petModel || '').trim();
     const bundleItems = (Array.isArray(data.bundleItems) ? data.bundleItems : [])
         .map((row) => ({ item: String(row.item || '').trim(), count: Math.max(1, Number(row.count) || 1) }))
         .filter((row) => row.item);
     if (category === 'vehicles' && !model) return { ok: false, message: 'Vehicle listings need a spawn name.' };
-    if ((category === 'weapons' || category === 'extras') && !itemName) return { ok: false, message: 'Enter the ox_inventory item name.' };
+    if ((category === 'weapons' || category === 'extras' || category === 'gangs') && !itemName && !model) return { ok: false, message: 'Enter the ox_inventory item name.' };
     if (category === 'bundles' && bundleItems.length < 2) return { ok: false, message: 'Add at least two ox_inventory items to the bundle.' };
-    if (category === 'pets' && !petModel) return { ok: false, message: 'Pet listings need a ped model.' };
     const id = data.editingId || data.id || `${category.slice(0, 3)}_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
     const extras = category === 'bundles'
         ? bundleItems
@@ -163,7 +171,7 @@ function mockNormalizeListing(data) {
     const item = {
         id,
         category,
-        tier: (category === 'vehicles' || category === 'weapons') ? normalizeTier(data.tier) : undefined,
+        tier: category === 'vehicles' ? normalizeTier(data.tier) : undefined,
         label,
         description: data.description || '',
         price,
@@ -196,7 +204,9 @@ function mockOpen() {
         ok: true,
         serverName: 'Envy Roleplay',
         keybind: 'F11',
-        currency: { name: 'Envy Coins', short: 'EC' },
+        currency: { name: 'Gems', short: 'Gems' },
+        isGangMember: true,
+        gangTabLabel: 'Gang Store',
         locale: {},
         player: {
             name: 'MoodyNewt8638',
@@ -234,7 +244,8 @@ function mockOpen() {
             codes: [],
             listings: [
                 { id: 'veh_sultan', category: 'vehicles', tier: 'blackdiamond', label: 'Karin Sultan', price: 8750, model: 'sultan' },
-                { id: 'wep_pistol', category: 'weapons', tier: 'emerald', label: 'Combat Pistol', price: 2450, item: 'WEAPON_PISTOL', weapon: 'WEAPON_PISTOL' },
+                { id: 'wep_pistol', category: 'weapons', label: 'Combat Pistol', price: 2450, item: 'WEAPON_PISTOL', weapon: 'WEAPON_PISTOL' },
+                { id: 'gang_switch', category: 'gangs', label: 'Gang Switchblade', price: 1200, item: 'WEAPON_SWITCHBLADE', weapon: 'WEAPON_SWITCHBLADE' },
                 { id: 'ext_armour', category: 'extras', label: 'Armour Pack', price: 400, item: 'armour', extras: [{ item: 'armour', count: 5 }] },
                 { id: 'bdl_starter', category: 'bundles', label: 'Starter Kit', price: 250, extras: [{ item: 'armour', count: 5 }, { item: 'bandage', count: 10 }, { item: 'lockpick', count: 2 }] },
             ],
@@ -250,11 +261,37 @@ async function post(name, data = {}) {
             if (!item) return { ok: false, message: 'Invalid item.' };
             if (state.player.coins < item.price) return { ok: false, message: `You do not have enough ${state.currency.name}.` };
             state.player.coins -= item.price;
+            state.player.lifetimeSpent = (state.player.lifetimeSpent || 0) + item.price;
             state.player.owned.unshift({ id: Date.now(), item_id: item.id, category: item.category || state.tab, label: item.label, active: 1, created_at: new Date().toISOString() });
             state.player.history.unshift({ id: Date.now(), label: item.label, category: item.category || state.tab, price: item.price, created_at: new Date().toISOString() });
             const self = (state.admin.players || []).find((p) => p.id === state.player.serverId);
             if (self) self.coins = state.player.coins;
-            return { ok: true, player: state.player, admin: state.admin };
+            return { ok: true, player: state.player, admin: state.admin, message: `${item.label} added. Check your inventory or garage.` };
+        }
+        if (name === 'lookupOx') {
+            const raw = String(data.name || data.model || '').trim();
+            if (!raw) return { ok: false };
+            const pretty = raw.replace(/^WEAPON_/i, '').replace(/[_-]+/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+            return { ok: true, name: raw, label: pretty, registered: true, image: '' };
+        }
+        if (name === 'redeem') {
+            const code = String(data.code || '').replace(/\s+/g, '').toUpperCase();
+            if (!code || code.length > 64 || !code.startsWith('TBX-')) {
+                return { ok: false, message: 'That Tebex / redeem code is invalid, used up, or expired.' };
+            }
+            const amount = 500;
+            state.player.coins += amount;
+            const self = (state.admin.players || []).find((p) => p.id === state.player.serverId);
+            if (self) self.coins = state.player.coins;
+            (state.admin.codes || (state.admin.codes = [])).unshift({
+                id: Date.now(),
+                code,
+                coins: amount,
+                uses: 1,
+                max_uses: 1,
+                created_at: new Date().toISOString(),
+            });
+            return { ok: true, player: state.player, admin: state.admin, message: `Code redeemed. Gems have been added. (+${amount} Gems)` };
         }
         if (name === 'gift') {
             return { ok: true, player: state.player, admin: state.admin };
@@ -328,6 +365,8 @@ function applyPayload(payload) {
     if (payload.lookup) state.lookup = payload.lookup;
     if (payload.players) state.players = payload.players;
     if (payload.theme) state.theme = normalizeTheme(payload.theme);
+    if (payload.isGangMember !== undefined) state.isGangMember = Boolean(payload.isGangMember);
+    if (payload.gangTabLabel) state.gangTabLabel = payload.gangTabLabel;
 }
 
 function applyTheme(name) {
@@ -351,17 +390,14 @@ function closeUI() {
     post('close');
 }
 
+function weaponList(cat) {
+    const w = cat?.weapons;
+    if (Array.isArray(w)) return w.map((i) => ({ ...i, category: 'weapons' }));
+    return TIER_IDS.flatMap((tier) => (w?.[tier] || []).map((i) => ({ ...i, category: 'weapons', tier })));
+}
+
 function findItem(itemId) {
-    const cat = state.catalog || {};
-    const buckets = [];
-    TIER_IDS.forEach((tier) => {
-        (cat.vehicles?.[tier] || []).forEach((i) => buckets.push({ ...i, category: 'vehicles', tier }));
-        (cat.weapons?.[tier] || []).forEach((i) => buckets.push({ ...i, category: 'weapons', tier }));
-    });
-    ['extras', 'bundles', 'pets', 'exclusives', 'limited'].forEach((key) => {
-        (cat[key] || []).forEach((i) => buckets.push({ ...i, category: key }));
-    });
-    return buckets.find((i) => i.id === itemId);
+    return allCatalogItems().find((i) => i.id === itemId);
 }
 
 function owns(itemId) {
@@ -394,9 +430,9 @@ function allCatalogItems() {
     const out = [];
     TIER_IDS.forEach((tier) => {
         (cat.vehicles?.[tier] || []).forEach((item) => out.push({ ...item, category: 'vehicles', tier }));
-        (cat.weapons?.[tier] || []).forEach((item) => out.push({ ...item, category: 'weapons', tier }));
     });
-    ['extras', 'bundles', 'pets', 'exclusives', 'limited'].forEach((key) => {
+    weaponList(cat).forEach((item) => out.push(item));
+    ['extras', 'bundles', 'pets', 'exclusives', 'limited', 'gangs'].forEach((key) => {
         (cat[key] || []).forEach((item) => out.push({ ...item, category: key }));
     });
     return out;
@@ -411,14 +447,19 @@ function categoryLabel(item) {
         pets: 'PET',
         exclusives: 'EXCLUSIVE',
         limited: 'LIMITED',
+        gangs: 'GANG',
     })[item.category] || 'ITEM';
 }
 
 function renderTabs() {
     const nav = document.getElementById('tabs');
-    nav.innerHTML = TABS.filter((tab) => !tab.admin || state.player?.isAdmin).map((tab) => `
+    nav.innerHTML = TABS.filter((tab) => {
+        if (tab.admin) return Boolean(state.player?.isAdmin);
+        if (tab.gang) return Boolean(state.isGangMember || state.player?.isAdmin);
+        return true;
+    }).map((tab) => `
         <button class="tab ${state.tab === tab.id ? 'active' : ''}" data-tab="${tab.id}">
-            ${ICONS[tab.id] || ''} ${tab.label}
+            ${ICONS[tab.id] || ''} ${tab.id === 'gangs' ? escapeHtml(state.gangTabLabel || tab.label) : tab.label}
         </button>
     `).join('');
     nav.querySelectorAll('.tab').forEach((btn) => {
@@ -491,7 +532,7 @@ function itemCard(item, extra = {}) {
         : '';
     let badge = '';
     if (extra.featured || item.category === 'bundles') badge = '<div class="tierchip popular">POPULAR</div>';
-    else if (tier) badge = `<div class="tierchip ${normalizeTier(tier)}">${escapeHtml(tierLabel(tier))}</div>`;
+    else if (tier && item.category === 'vehicles') badge = `<div class="tierchip ${normalizeTier(tier)}">${escapeHtml(tierLabel(tier))}</div>`;
     else if (item.limitedUntil) badge = '<div class="tierchip limited">LIMITED</div>';
     const remaining = item.remaining;
     const stock = remaining != null
@@ -549,6 +590,9 @@ function shopToolbar(title, sub, extraHtml = '') {
 
 function shopListFor(kind, tier) {
     const groups = state.catalog?.[kind] || {};
+    if (Array.isArray(groups)) {
+        return groups.map((item) => ({ ...item, category: kind }));
+    }
     if (tier === 'all') {
         return TIER_IDS.flatMap((name) =>
             (groups[name] || []).map((item) => ({ ...item, category: kind, tier: normalizeTier(item.tier || name) }))
@@ -581,21 +625,14 @@ function renderVehicles() {
     const list = filterList(shopListFor('vehicles', tier));
     return `
         <section class="panel">
-            ${shopToolbar('Vehicles', 'Emerald, Sapphire, and Black Diamond Envy rides, stored in your garage.', tierPills('vehicles'))}
+            ${shopToolbar('Vehicles', 'Pick a spawn name in Admin — the car is stored in JG garages after purchase.', tierPills('vehicles'))}
             <div class="grid">${list.map((item) => itemCard(item, { tier: item.tier })).join('') || '<div class="empty">No vehicles in this tier yet. Admins add them from the Admin tab.</div>'}</div>
         </section>
     `;
 }
 
 function renderWeapons() {
-    const tier = state.weaponTier;
-    const list = filterList(shopListFor('weapons', tier));
-    return `
-        <section class="panel">
-            ${shopToolbar('Weapons', 'Three combat tiers. Unique and stock rules are enforced on purchase.', tierPills('weapons'))}
-            <div class="grid">${list.map((item) => itemCard(item, { tier: item.tier })).join('') || '<div class="empty">No weapons in this tier yet. Admins add them from the Admin tab.</div>'}</div>
-        </section>
-    `;
+    return renderSimpleShop('weapons', 'Weapons', 'Every weapon is granted through ox_inventory. Images come from ox_inventory/web/images.');
 }
 
 function renderSimpleShop(key, title, sub) {
@@ -673,7 +710,7 @@ function renderDashboard() {
                     <div class="veil"></div>
                     <div class="hero-copy">
                         <h2>Envy Store</h2>
-                        <p>Neon nights. Exclusive rides, heat, and bundles — one purchase, delivered in-game.</p>
+                        <p>Spend Gems on rides, weapons, and packs. Buy Gems on Tebex, then redeem your Payment ID (tbx-xxxxxxxx) here.</p>
                         <button class="btn add" data-goto="vehicles">Shop vehicles →</button>
                     </div>
                 </div>
@@ -691,7 +728,7 @@ function renderDashboard() {
                     <div class="section-tabs">
                         <span class="section-tab active">Featured</span>
                     </div>
-                    <div class="sub">Tonight in Envy Roleplay — packages, vehicles, and extras in the shop.</div>
+                    <div class="sub">Featured Gems listings. Admins add more from the Admin tab in a few fields.</div>
                 </div>
                 <input class="search" id="search" placeholder="Search..." value="${escapeHtml(state.search)}" />
             </div>
@@ -707,7 +744,7 @@ function renderInventory() {
     const owned = (state.player?.owned || []).filter((row) => Number(row.active) === 1);
     return `
         <section class="panel">
-            ${shopToolbar('Inventory', 'ox_inventory items land in your bag. Vehicles stay in the garage. Pets spawn from here.')}
+            ${shopToolbar('Inventory', 'ox_inventory items land in your bag. Vehicles stay in your garage.')}
             ${owned.map((row) => {
                 const isPet = row.category === 'pets' || Boolean((findItem(row.item_id) || {}).petModel);
                 return `
@@ -793,6 +830,22 @@ function readListingForm() {
     };
 }
 
+function updateListingHint() {
+    const hint = document.getElementById('listHint');
+    if (!hint) return;
+    const category = listingVal('listCategory') || 'extras';
+    const copy = {
+        vehicles: 'Type the spawn name (sultan). Display name and image key fill in automatically. Vehicle goes to JG garages on buy.',
+        weapons: 'Type the ox_inventory weapon (WEAPON_PISTOL). The image comes from ox_inventory/web/images. No tiers.',
+        extras: 'Type the ox_inventory item (armour). Image uses Fivemanage, then ox_inventory if that file is missing.',
+        bundles: 'Add two or more ox items. Players get the whole package in one purchase.',
+        gangs: 'Same as a normal listing, but only Discord gang-role players see the Gang tab.',
+        exclusives: 'Unique city drop. Set a spawn name or ox item, then Save.',
+        limited: 'Timed listing. Set the until date in More options.',
+    };
+    hint.textContent = copy[category] || copy.extras;
+}
+
 function toggleListingFields() {
     const category = listingVal('listCategory') || 'extras';
     document.querySelectorAll('[data-for]').forEach((el) => {
@@ -810,6 +863,32 @@ function toggleListingFields() {
             preview.removeAttribute('src');
             preview.classList.add('hidden-field');
         }
+    }
+    updateListingHint();
+}
+
+async function lookupListingItem() {
+    const name = listingVal('listItemName') || listingVal('listModel');
+    if (!name) return;
+    const result = await post('lookupOx', {
+        name,
+        category: listingVal('listCategory'),
+        model: listingVal('listModel'),
+    });
+    const box = document.getElementById('oxPreview');
+    if (!box) return;
+    if (!result || (!result.registered && !result.image && !result.label)) {
+        box.classList.add('hidden-field');
+        box.innerHTML = '';
+        return;
+    }
+    box.classList.remove('hidden-field');
+    const label = result.label || result.name || name;
+    const img = result.image ? oxImage(result.image, label) : '';
+    box.innerHTML = `${img}<span>${escapeHtml(label)}${result.registered ? '' : ' (not in ox_inventory)'}</span>`;
+    const labelInput = document.getElementById('listLabel');
+    if (labelInput && !labelInput.value && result.label) {
+        labelInput.value = result.label;
     }
 }
 
@@ -858,53 +937,52 @@ function renderAdmin() {
             <div class="panel-head">
                 <div>
                     <h2>Admin panel</h2>
-                    <div class="sub">Add shop listings, including multi-item bundles, then grant Envy Coins.</div>
+                    <div class="sub">Quick add: pick a type, enter the spawn / ox name and a Gems price, then Save.</div>
                 </div>
                 <button class="btn ghost" id="adminRefresh">Refresh</button>
             </div>
             <h3 id="listingFormTitle">Add shop listing</h3>
+            <p class="quick-hint" id="listHint">Vehicles need a spawn name (sultan). Weapons and items need the ox_inventory name. Display name is filled in for you if you leave it blank.</p>
             <input type="hidden" id="listEditingId" />
             <div class="form-grid listing-grid">
                 <div class="field" data-for="all">
-                    <label>Category</label>
+                    <label>Type</label>
                     <select id="listCategory">
                         <option value="vehicles">Vehicle</option>
                         <option value="weapons">Weapon</option>
-                        <option value="extras" selected>Extra item</option>
+                        <option value="extras" selected>Item</option>
                         <option value="bundles">Bundle</option>
-                        <option value="pets">Pet</option>
+                        <option value="gangs">Gang store</option>
                         <option value="exclusives">City exclusive</option>
                         <option value="limited">Limited time</option>
                     </select>
                 </div>
-                <div class="field" data-for="vehicles weapons">
-                    <label>Tier</label>
+                <div class="field" data-for="vehicles">
+                    <label>Vehicle tier</label>
                     <select id="listTier">
                         <option value="emerald">Emerald</option>
                         <option value="sapphire">Sapphire</option>
                         <option value="blackdiamond">Black Diamond</option>
                     </select>
                 </div>
-                <div class="field" data-for="all">
-                    <label>Display name</label>
-                    <input id="listLabel" placeholder="Karin Sultan" />
+                <div class="field" data-for="vehicles exclusives limited gangs">
+                    <label>Vehicle spawn name</label>
+                    <input id="listModel" placeholder="sultan" />
+                </div>
+                <div class="field" data-for="weapons extras exclusives limited gangs">
+                    <label>ox_inventory item</label>
+                    <input id="listItemName" placeholder="WEAPON_PISTOL or armour" />
+                    <div class="ox-preview hidden-field" id="oxPreview"></div>
                 </div>
                 <div class="field" data-for="all">
-                    <label>Price (EC)</label>
+                    <label>Price (${state.currency.short || 'Gems'})</label>
                     <input id="listPrice" type="number" min="0" placeholder="250" />
                 </div>
-                <div class="field full" data-for="all">
-                    <label>Image link</label>
-                    <div class="image-row">
-                        <input id="listImage" placeholder="https://r2.fivemanage.com/YOUR_TEAM_ID/sultan.webp" />
-                        <img id="listImagePreview" class="listing-preview hidden-field" alt="" />
-                    </div>
+                <div class="field" data-for="all">
+                    <label>Display name <span class="muted-inline">(optional)</span></label>
+                    <input id="listLabel" placeholder="Auto from spawn / ox item" />
                 </div>
-                <div class="field" data-for="weapons extras exclusives limited pets">
-                    <label>ox_inventory item name</label>
-                    <input id="listItemName" placeholder="armour / WEAPON_PISTOL / pet_husky" />
-                </div>
-                <div class="field" data-for="extras exclusives limited">
+                <div class="field" data-for="extras exclusives limited gangs">
                     <label>Item count</label>
                     <input id="listCount" type="number" min="1" value="1" />
                 </div>
@@ -918,61 +996,69 @@ function renderAdmin() {
                     <button type="button" class="btn ghost" id="addBundleItem">Add item</button>
                     <div class="sub">A bundle needs at least two items. Purchase grants every row in one package.</div>
                 </div>
-                <div class="field" data-for="vehicles exclusives limited">
-                    <label>Vehicle spawn name</label>
-                    <input id="listModel" placeholder="sultan" />
-                </div>
-                <div class="field" data-for="vehicles exclusives limited">
-                    <label>JG garage name</label>
-                    <input id="listGarageId" placeholder="legion" />
-                </div>
-                <div class="field" data-for="vehicles exclusives limited">
-                    <label>Garage type</label>
-                    <select id="listGarageType">
-                        <option value="car">Car</option>
-                        <option value="heli">Air / heli</option>
-                        <option value="boat">Boat</option>
-                    </select>
-                </div>
-                <div class="field" data-for="weapons">
-                    <label>Ammo</label>
-                    <input id="listAmmo" type="number" min="0" placeholder="60" />
-                </div>
-                <div class="field" data-for="pets limited exclusives">
-                    <label>Pet ped model</label>
-                    <input id="listPetModel" placeholder="a_c_husky" />
-                </div>
-                <div class="field" data-for="all">
-                    <label>Custom id (optional)</label>
-                    <input id="listId" placeholder="auto from name" />
-                </div>
-                <div class="field" data-for="all">
-                    <label>Stock (blank = unlimited)</label>
-                    <input id="listStock" type="number" min="0" placeholder="" />
-                </div>
-                <div class="field" data-for="limited">
-                    <label>Limited from (UTC)</label>
-                    <input id="listLimitedFrom" placeholder="2026-08-01T00:00:00Z" />
-                </div>
-                <div class="field" data-for="limited">
-                    <label>Limited until (UTC)</label>
-                    <input id="listLimitedUntil" placeholder="2026-09-15T23:59:59Z" />
-                </div>
-                <div class="field full" data-for="all">
-                    <label>Description</label>
-                    <textarea id="listDescription" rows="2" placeholder="Shown on the shop card."></textarea>
-                </div>
-                <div class="field" data-for="all">
-                    <label class="check-label"><input id="listUnique" type="checkbox" /> Unique (one per character)</label>
-                </div>
             </div>
+            <details class="advanced-box">
+                <summary>More options</summary>
+                <div class="form-grid listing-grid" style="margin-top:10px">
+                    <div class="field full" data-for="all">
+                        <label>Image link override</label>
+                        <div class="image-row">
+                            <input id="listImage" placeholder="Leave blank — weapons use ox, everything else uses Fivemanage then ox" />
+                            <img id="listImagePreview" class="listing-preview hidden-field" alt="" />
+                        </div>
+                    </div>
+                    <div class="field" data-for="vehicles exclusives limited gangs">
+                        <label>JG garage name</label>
+                        <input id="listGarageId" placeholder="legion" />
+                    </div>
+                    <div class="field" data-for="vehicles exclusives limited gangs">
+                        <label>Garage type</label>
+                        <select id="listGarageType">
+                            <option value="car">Car</option>
+                            <option value="heli">Air / heli</option>
+                            <option value="boat">Boat</option>
+                        </select>
+                    </div>
+                    <div class="field" data-for="weapons gangs">
+                        <label>Ammo</label>
+                        <input id="listAmmo" type="number" min="0" placeholder="60" />
+                    </div>
+                    <div class="field hidden-field" data-for="limited exclusives">
+                        <label>Pet ped model</label>
+                        <input id="listPetModel" placeholder="a_c_husky" />
+                    </div>
+                    <div class="field" data-for="all">
+                        <label>Custom id (optional)</label>
+                        <input id="listId" placeholder="auto from name" />
+                    </div>
+                    <div class="field" data-for="all">
+                        <label>Stock (blank = unlimited)</label>
+                        <input id="listStock" type="number" min="0" placeholder="" />
+                    </div>
+                    <div class="field" data-for="limited">
+                        <label>Limited from (UTC)</label>
+                        <input id="listLimitedFrom" placeholder="2026-08-01T00:00:00Z" />
+                    </div>
+                    <div class="field" data-for="limited">
+                        <label>Limited until (UTC)</label>
+                        <input id="listLimitedUntil" placeholder="2026-09-15T23:59:59Z" />
+                    </div>
+                    <div class="field full" data-for="all">
+                        <label>Description</label>
+                        <textarea id="listDescription" rows="2" placeholder="Shown on the shop card."></textarea>
+                    </div>
+                    <div class="field" data-for="all">
+                        <label class="check-label"><input id="listUnique" type="checkbox" /> Unique (one per character)</label>
+                    </div>
+                </div>
+            </details>
             <div class="actions" style="margin-top:10px">
                 <button class="btn primary" id="saveListing">Save listing</button>
                 <button class="btn ghost" id="clearListing">Clear form</button>
             </div>
             <h3 style="margin:18px 0 8px">Shop listings</h3>
             <table class="table">
-                <thead><tr><th></th><th>Name</th><th>Category</th><th>Item</th><th>EC</th><th></th></tr></thead>
+                <thead><tr><th></th><th>Name</th><th>Category</th><th>Item</th><th>Gems</th><th></th></tr></thead>
                 <tbody>
                     ${listings.map((row) => `
                         <tr>
@@ -1006,22 +1092,22 @@ function renderAdmin() {
                         </div>
                     </div>
                     <div class="actions" style="margin-top:10px">
-                        <button class="btn primary" data-admin="give">Give coins</button>
+                        <button class="btn primary" data-admin="give">Give Gems</button>
                         <button class="btn ghost" data-admin="remove">Remove</button>
                         <button class="btn ghost" data-admin="set">Set</button>
                         <button class="btn ghost" id="adminLookup">Lookup</button>
                     </div>
                     <h3 style="margin:18px 0 8px">Online players</h3>
                     <table class="table">
-                        <thead><tr><th>ID</th><th>Name</th><th>EC</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Name</th><th>Gems</th></tr></thead>
                         <tbody>
                             ${players.map((p) => `<tr data-fill-id="${p.id}" style="cursor:pointer"><td>${p.id}</td><td>${escapeHtml(p.name)}</td><td>${formatCoins(p.coins)}</td></tr>`).join('') || '<tr><td colspan="3">No players.</td></tr>'}
                         </tbody>
                     </table>
                     <h3 style="margin:18px 0 8px">Create redeem code</h3>
                     <div class="form-grid">
-                        <div class="field"><label>Code</label><input id="codeName" placeholder="ENVY1000" /></div>
-                        <div class="field"><label>Coins</label><input id="codeCoins" type="number" value="100" /></div>
+                        <div class="field"><label>Code</label><input id="codeName" placeholder="tbx-xxxxxxxx" /></div>
+                        <div class="field"><label>Gems</label><input id="codeCoins" type="number" value="100" /></div>
                         <div class="field"><label>Max uses</label><input id="codeUses" type="number" value="10" /></div>
                         <div class="field"><label>Item id (optional)</label><input id="codeItem" placeholder="veh_sultan" /></div>
                     </div>
@@ -1037,7 +1123,7 @@ function renderAdmin() {
                     </table>
                     <h3 style="margin:18px 0 8px">Codes</h3>
                     <table class="table">
-                        <thead><tr><th>Code</th><th>EC</th><th>Uses</th></tr></thead>
+                        <thead><tr><th>Code</th><th>Gems</th><th>Uses</th></tr></thead>
                         <tbody>
                             ${codes.map((row) => `<tr><td>${escapeHtml(row.code)}</td><td>${formatCoins(row.coins)}</td><td>${row.uses}/${row.max_uses}</td></tr>`).join('') || '<tr><td colspan="3">None</td></tr>'}
                         </tbody>
@@ -1061,9 +1147,9 @@ function renderContent() {
         dashboard: renderDashboard,
         vehicles: renderVehicles,
         weapons: renderWeapons,
-        extras: () => renderSimpleShop('extras', 'Extra Items', 'Single ox_inventory items like armour, ammo, and repair kits.'),
+        extras: () => renderSimpleShop('extras', 'Extra Items', 'Type the ox_inventory item name in Admin. Images use Fivemanage, then ox_inventory.'),
         bundles: () => renderSimpleShop('bundles', 'Bundles', 'One purchase grants every ox_inventory item in the package.'),
-        pets: () => renderSimpleShop('pets', 'Pets', 'Companion peds you can spawn from inventory.'),
+        gangs: () => renderSimpleShop('gangs', state.gangTabLabel || 'Gang Store', 'Only players with the configured Discord gang role can see this tab.'),
         exclusives: () => renderSimpleShop('exclusives', 'City Exclusives', 'One-per-character Envy drops that never hit public dealers.'),
         limited: () => renderSimpleShop('limited', 'Limited Time', 'Timed stock. When the window closes, the listing disappears.'),
         inventory: renderInventory,
@@ -1150,6 +1236,10 @@ function renderContent() {
     if (root.querySelector('#listCategory')) {
         toggleListingFields();
         root.querySelector('#listCategory').addEventListener('change', toggleListingFields);
+        ['listItemName', 'listModel'].forEach((id) => {
+            const el = root.querySelector(`#${id}`);
+            if (el) el.addEventListener('blur', lookupListingItem);
+        });
         const image = root.querySelector('#listImage');
         if (image) image.addEventListener('input', toggleListingFields);
         const addBundle = root.querySelector('#addBundleItem');
@@ -1199,7 +1289,7 @@ function handleResult(result, successMessage) {
         return;
     }
     applyPayload(result);
-    if (successMessage) toast(successMessage);
+    toast(result.message || successMessage || 'Done.');
     render();
 }
 
@@ -1291,11 +1381,11 @@ function showRedeemModal() {
     modal.classList.remove('hidden');
     modal.innerHTML = `
         <div class="modal-card">
-            <h3>Redeem code</h3>
-            <p>Enter an Envy Coins code from staff or a Tebex package.</p>
+            <h3>Redeem Gems</h3>
+            <p>Paste your Tebex Payment ID (tbx-xxxxxxxx) from the receipt after buying Gems, or a staff code.</p>
             <div class="field">
-                <label>Code</label>
-                <input id="redeemCode" placeholder="ENVY1000" />
+                <label>Tebex / redeem code</label>
+                <input id="redeemCode" placeholder="tbx-xxxxxxxx" />
             </div>
             <div class="modal-actions">
                 <button class="btn ghost" id="modalCancel">Cancel</button>
