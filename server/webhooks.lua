@@ -29,7 +29,7 @@ function Webhooks.Purchase(actorName, actorId, item, price, giftedTo)
     local fields = {
         { name = 'Player', value = ('%s\n`%s`'):format(actorName or 'Unknown', actorId or 'n/a'), inline = true },
         { name = 'Item', value = ('%s (`%s`)'):format(item.label, item.id), inline = true },
-        { name = 'Price', value = tostring(price) .. ' RC', inline = true },
+        { name = 'Price', value = tostring(price) .. ' ' .. (Config.CurrencyShort or 'Gems'), inline = true },
         { name = 'Category', value = item.category or 'n/a', inline = true },
         { name = 'Tier', value = item.tier or '—', inline = true },
     }
@@ -40,7 +40,7 @@ function Webhooks.Purchase(actorName, actorId, item, price, giftedTo)
 end
 
 function Webhooks.Coins(actorName, actorId, targetName, targetId, action, amount, reason)
-    post(Config.Webhooks.coins, embed((Config.CurrencyName or 'Envy Coins') .. ' ' .. action, reason or 'No reason provided.', Config.WebhookColor.coins, {
+    post(Config.Webhooks.coins, embed((Config.CurrencyName or 'Gems') .. ' ' .. action, reason or 'No reason provided.', Config.WebhookColor.coins, {
         { name = 'Admin', value = ('%s\n`%s`'):format(actorName or 'Console', actorId or 'console'), inline = true },
         { name = 'Target', value = ('%s\n`%s`'):format(targetName or 'Unknown', targetId or 'n/a'), inline = true },
         { name = 'Amount', value = tostring(amount), inline = true },

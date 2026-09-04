@@ -1,28 +1,21 @@
 # Envy Roleplay Donator (`djfivem-donatorenvy`)
 
-FiveM donator store for **Envy Roleplay**, based on `djfivem-305donator`, with **Envy Coins**, Emerald / Sapphire / Black Diamond tiers, a neon cyan / chrome shop UI, Tebex console grants, oxmysql persistence, and Discord webhook logs.
+FiveM donator store for **Envy Roleplay**, based on `djfivem-305donator`, with **Gems**, a neon cyan / chrome shop UI, Tebex Payment ID redeem, oxmysql persistence, and an optional Discord gang tab.
 
 Open with **F11** or `/donator`.
 
 ## Features
 
-- **In-game shop editor** — admins add vehicles, weapons, extras, bundles, pets, exclusives, and limited drops from the Admin tab (image link, display name, ox item name, price, and the rest)
+- **Quick shop editor** — pick Vehicle / Weapon / Item, type the spawn or ox name and a Gems price, then Save. Display name fills in for you.
 - **Empty catalog by default** — no built-in items; you add your own
-- **Vehicles & weapons** — Emerald, Sapphire, and Black Diamond tiers, stored in **JG Advanced Garages** after purchase (ESX / QB / Qbox fallback if JG is not started)
-- **Weapons & extras** — granted through **ox_inventory** (`CanCarryItem`, `AddItem`, `RemoveItem`)
-- **Bundles** — one listing that grants multiple ox_inventory items in a single purchase
-- **Color themes** — set only in `config.lua` (`envy` default: neon cyan + chrome). No in-UI theme picker.
-- **Images** — shop UI and inventory icons from **Fivemanage** CDN links (`metadata.imageurl`)
-- **City exclusives** — unique one-per-character vehicles, weapons, and access cards
-- **Limited time** — server-enforced windows, stock counts, and countdown in the UI
-- **Pets** — buy a companion ped, spawn / despawn it from ox_inventory
-- **Envy Coins** — stored per character identifier, granted from chat, Tebex console commands, or the in-menu admin panel
-- **Gifting** — buy an item for another player by server ID
-- **Redeem codes** — admins can mint codes that grant coins and/or catalog items
-- **Inventory + history** — owned items, 7-day spend chart, purchase log
-- **Refunds** — admins can look up a player and refund a purchase
-- **Discord logs** — purchases, coin grants, admin actions, and errors
-- **Exports** — other resources (Tebex, VIP scripts) can grant coins
+- **Vehicles** — Emerald / Sapphire / Black Diamond tiers, stored in **JG Advanced Garages** after purchase
+- **Weapons** — one flat list (no tiers). Images always come from `ox_inventory/web/images`
+- **Items & bundles** — granted through **ox_inventory**. Images use **Fivemanage**, then fall back to ox_inventory
+- **Confirmed delivery** — weapons and items go into inventory immediately; vehicles go into the garage. Pending grants flush on next join
+- **Gems** — Tebex Payment IDs (`tbx-xxxxxxxx`) redeem in the shop. Staff can still grant Gems from Admin
+- **Gang Store tab** — only players with a configured Discord role can see it (admins always can)
+- **City exclusives & limited time** — unique and timed listings
+- **Gifting, refunds, inventory, Discord webhooks**
 
 ## Install
 
@@ -42,9 +35,9 @@ add_ace group.admin donator.admin allow
 `jg-advancedgarages` is optional. If it is not started, vehicles still insert into ESX `owned_vehicles` or QB `player_vehicles`.
 
 4. Open [`config.lua`](config.lua) and set:
-   - `Config.Images.baseUrl` to your Fivemanage folder URL
+   - `Config.Images.baseUrl` to your Fivemanage folder URL (vehicles / extras)
    - `Config.JGGarages.defaultGarage` to a JG garage **name** (example: `legion`)
-   - `Config.Theme` (`envy`, `miami`, `rebel`, `crimson`, `ocean`, `gold`, `emerald`, `violet`) — config only
+   - `Config.Discord` if you want the Gang tab
    - `Config.Webhooks` Discord URLs
 5. Restart the server.
 
@@ -72,10 +65,10 @@ Config.Images = {
 | Kind | Example file |
 |---|---|
 | Vehicle | `sultan.webp` |
-| Weapon | `weapon_pistol.webp` |
 | Extra | `armour.webp`, `bandage.webp` |
-| Pet | `pet_husky.webp` |
 | Custom | `donator_plate.webp`, `penthouse_card.webp` |
+
+Weapons do **not** use Fivemanage. Put `weapon_pistol.png` in `ox_inventory/web/images`.
 
 You can also paste a full URL on any catalog row (`image = 'https://r2.fivemanage.com/...'`) or set `imageKey = 'armour'` when the listing id does not match the filename.
 
@@ -85,7 +78,7 @@ If `baseUrl` is empty, vehicles fall back to `docs.fivem.net` and items fall bac
 
 ## ox_inventory
 
-This resource is linked to ox_inventory for **weight/slot checks**, **AddItem / RemoveItem**, and **usable pets**. Images come from Fivemanage first, then ox_inventory.
+This resource is linked to ox_inventory for **weight/slot checks**, **AddItem / RemoveItem**, and delivery. Weapon images always come from ox_inventory. Other images use Fivemanage first, then ox_inventory.
 
 Put this above the donator resource:
 
@@ -110,7 +103,7 @@ Merge [`install/ox_inventory_items.lua`](install/ox_inventory_items.lua) into `o
 - `donator_plate`, `penthouse_card`, `repairkit`
 - Pet items with `client.export = 'djfivem-donatorenvy.usePet'`
 
-Players open the store with **F11** or `/donator`. `/coins` prints the current Envy Coin balance.
+Players open the store with **F11** or `/donator`. `/coins` prints the current Gems balance.
 
 ## JG Advanced Garages
 
@@ -131,36 +124,34 @@ Admins are anyone with ACE `donator.admin`, ESX groups `admin` / `superadmin`, o
 
 | Command | What it does |
 |---|---|
-| `/givecoins [id] [amount] [reason]` | Add coins |
-| `/removecoins [id] [amount] [reason]` | Remove coins |
+| `/givecoins [id] [amount] [reason]` | Add Gems |
+| `/removecoins [id] [amount] [reason]` | Remove Gems |
 | `/setcoins [id] [amount]` | Set an exact balance |
 | `/checkcoins [id]` | Inspect a player (or yourself) |
-| `/givecoinsid [identifier] [amount] [reason]` | Grant coins to an offline identifier (also used by Tebex) |
-| `/envygrant [id or identifier] [amount] [reason]` | Tebex / console Envy Coin grant |
-| `/envypackage [id or identifier] [itemId]` | Tebex / console catalog grant (no coin charge) |
-| `/coins` | Show your own balance |
+| `/givecoinsid [identifier] [amount] [reason]` | Grant Gems to an offline identifier |
+| `/gemgrant [id or identifier] [amount] [reason]` | Console / Tebex instant Gem grant |
+| `/gempackage [id or identifier] [itemId]` | Console / Tebex catalog grant (no Gem charge) |
+| `/tbxgems [tbx-id] [gems] [itemId]` | Register a Tebex Payment ID for in-shop redeem |
+| `/coins` | Show your own Gems |
 
-The **Admin** tab inside the store is where you add shop items, grant coins, create redeem codes, inspect history, and refund purchases.
+The **Admin** tab is where you add shop items, grant Gems, create codes, inspect history, and refund purchases.
 
-### Add a shop listing in-game
+### Add a listing (quick)
 
-1. Open the store with **F11** as an admin and open **Admin**.
-2. Fill **Add shop listing**:
-   - **Category** — Vehicle, Weapon, Extra item, Bundle, Pet, City exclusive, or Limited time
-   - **Display name** — card title
-   - **Price** — Envy Coins
-   - **Tier** — Emerald, Sapphire, or Black Diamond (vehicles and weapons)
-   - **Image link** — full Fivemanage URL (`https://r2.fivemanage.com/.../sultan.webp`)
-   - **ox_inventory item name** — for weapons, extras, and pets (`armour`, `WEAPON_PISTOL`, `pet_husky`)
-   - **Bundle items** — for bundles, add two or more ox_inventory names with counts (`armour` x5, `bandage` x10)
-   - **Vehicle spawn name** — for cars (`sultan`)
-   - **Item count**, **ammo**, **JG garage**, **pet model**, **unique**, **stock**, and limited dates as needed
-3. Click **Save listing**. It shows in that shop tab immediately and is stored in `dj_envydonator_listings`.
-4. Use **Edit** / **Delete** on the listings table to change or remove it.
+1. Open the store with **F11** as an admin → **Admin**.
+2. Pick the type:
+   - **Vehicle** — spawn name `sultan` + Gems price. Optional vehicle tier.
+   - **Weapon** — ox name `WEAPON_PISTOL` + Gems price. Image comes from `ox_inventory/web/images/weapon_pistol.png`.
+   - **Item** — ox name `armour` + count + Gems price.
+   - **Bundle** — two or more ox names.
+   - **Gang store** — same as a weapon/item/vehicle, but only Discord gang roles see that tab.
+3. Display name is optional. Leave it blank and the script uses the ox label or a cleaned spawn name.
+4. Click **Save listing**. Use **More options** only if you need stock, unique, garage, or a custom image URL.
+5. Edit / Delete rows in the listings table anytime.
 
-Weapons and extras grant the ox_inventory item. Bundles grant every item in the package. Vehicles go into JG Advanced Garages. Pets grant an ox item whose name is the listing id (set Custom id to your ox item name).
+Weapons and extras grant the ox_inventory item immediately. Vehicles go into JG Advanced Garages. If the player is offline, the grant is marked pending and delivered when they next join.
 
-Tabs are ordered Dashboard → Vehicles → Weapons → Extra Items → Bundles → Pets → City Exclusives → Limited Time → Inventory → Admin.
+Tabs: Dashboard → Vehicles → Weapons → Extra Items → Bundles → Gang Store (role only) → City Exclusives → Limited Time → Inventory → Admin.
 
 The default shop is empty on purpose so you only sell what you add.
 
@@ -188,24 +179,76 @@ exports['djfivem-donatorenvy']:GrantItemIdentifier('license:abc123', 'veh_sultan
 
 Amounts are server-validated (positive integers, capped by `Config.Tebex.MaxGrant`).
 
-## Tebex
+## Tebex — buy Gems, redeem the tbx- ID
 
-Tebex runs commands as the server console. Use either the identifier (`{sid}` / license) or the online server id (`{id}`).
+Players buy a Gems package on Tebex, then paste the **Payment ID** from their receipt (`tbx-xxxxxxxx`) into **Redeem** in the shop.
 
-**Give Envy Coins**
+### 1. Create a Tebex package (example: 500 Gems)
 
-```
-envygrant {sid} 2500 Tebex VIP
-givecoinsid {sid} 2500 Tebex VIP
-```
-
-**Give a shop listing** (create the listing in Admin first, then use its Custom id)
+In the Tebex package **Game Server Commands**, add a console command:
 
 ```
-envypackage {sid} veh_sultan
+tbxgems {transaction} 500
 ```
 
-If the player is offline, coins still apply. Vehicles still insert into JG / framework garages. ox_inventory items wait until they next join (`pending` grant).
+| Package | Command |
+|---|---|
+| 500 Gems | `tbxgems {transaction} 500` |
+| 2500 Gems | `tbxgems {transaction} 2500` |
+| 500 Gems + a car | `tbxgems {transaction} 500 veh_sultan` |
+
+`{transaction}` is the Tebex Payment ID. The script stores it as a one-time redeem code. If Tebex retries the command, a duplicate ID is ignored.
+
+### 2. Player flow
+
+1. Player checks out on your Tebex store.
+2. Tebex emails / shows Payment ID `tbx-xxxxxxxx`.
+3. In-game they press **F11** → **REDEEM** → paste that ID.
+4. Gems are added. The same ID cannot be used twice.
+
+### Optional: instant grant (Tebex FiveM plugin linked)
+
+If the player is linked and online, you can skip redeem:
+
+```
+gemgrant {id} 2500 Tebex VIP
+gempackage {id} veh_sultan
+```
+
+Offline Gem grants still apply to the identifier. Offline inventory items wait until they next join.
+
+## Discord gang tab
+
+The **Gang Store** tab is hidden unless the player has one of the Discord role IDs in `Config.Gang.roleIds`. Admins always see it so they can add listings.
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) → New Application → **Bot**.
+2. Enable **SERVER MEMBERS INTENT** on the Bot page (Privileged Gateway Intents).
+3. Reset / copy the bot token into `Config.Discord.botToken`.
+4. Invite the bot to your Discord. Example URL (replace the client id):
+
+```
+https://discord.com/oauth2/authorize?client_id=YOUR_BOT_CLIENT_ID&scope=bot&permissions=2048
+```
+
+5. Enable Developer Mode in Discord (User Settings → Advanced).
+6. Right-click the server → **Copy Server ID** → `Config.Discord.guildId`.
+7. Right-click the gang role → **Copy Role ID** → paste into `Config.Gang.roleIds`.
+8. Set `Config.Discord.enabled = true` and restart the resource.
+
+Players must have Discord linked in FiveM (they do if they join through Discord). If the tab does not appear:
+
+- Confirm the bot is in the server and the intent is on
+- Confirm the player has the role
+- Confirm `discord:` shows in their identifiers (`txAdmin` player view)
+- Admins can still open the tab to add Gang listings
+
+## Images
+
+| Listing | Image source |
+|---|---|
+| Weapons | `nui://ox_inventory/web/images/{weapon}.png` (then `.webp` if the png is missing) |
+| Vehicles, extras, bundles, gang, exclusives | Fivemanage `baseUrl` / pasted URL, then ox_inventory images |
+| Vehicles with no Fivemanage file | `docs.fivem.net/vehicles/{model}.webp` as last resort |
 
 ## Color themes
 

@@ -101,6 +101,10 @@ RegisterNUICallback('adminDeleteListing', function(data, cb)
     cb(DonatorCallback('adminDeleteListing', data) or { ok = false })
 end)
 
+RegisterNUICallback('lookupOx', function(data, cb)
+    cb(DonatorCallback('lookupOx', data) or { ok = false })
+end)
+
 RegisterNetEvent('djfivem-donatorenvy:client:notify', function(message, nType)
     BeginTextCommandThefeedPost('STRING')
     AddTextComponentSubstringPlayerName(message)

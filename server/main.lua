@@ -81,15 +81,16 @@ local function publicItem(item)
     return pub
 end
 
-local function publicCatalog()
+local function publicCatalog(includeGangs)
     local out = {
         vehicles = EmptyTierBuckets(),
-        weapons = EmptyTierBuckets(),
+        weapons = {},
         extras = {},
         bundles = {},
         pets = {},
         exclusives = {},
         limited = {},
+        gangs = {},
     }
 
     for tier, list in pairs(Catalog.vehicles) do
@@ -101,28 +102,25 @@ local function publicCatalog()
             out.vehicles[item.tier][#out.vehicles[item.tier] + 1] = publicItem(item)
         end
     end
-    for tier, list in pairs(Catalog.weapons) do
-        for i = 1, #list do
-            local item = list[i]
-            item.category = 'weapons'
-            item.tier = NormalizeTier(tier)
-            out.weapons[item.tier] = out.weapons[item.tier] or {}
-            out.weapons[item.tier][#out.weapons[item.tier] + 1] = publicItem(item)
-        end
-    end
 
     local function fill(src, dest, category)
+        if type(src) ~= 'table' then
+            return
+        end
         for i = 1, #src do
             src[i].category = category
             dest[#dest + 1] = publicItem(src[i])
         end
     end
 
+    fill(Catalog.weapons, out.weapons, 'weapons')
     fill(Catalog.extras, out.extras, 'extras')
     fill(Catalog.bundles, out.bundles, 'bundles')
-    fill(Catalog.pets, out.pets, 'pets')
     fill(Catalog.exclusives, out.exclusives, 'exclusives')
     fill(Catalog.limited, out.limited, 'limited')
+    if includeGangs then
+        fill(Catalog.gangs, out.gangs, 'gangs')
+    end
     return out
 end
 
@@ -211,6 +209,10 @@ local function grantItem(targetSource, identifier, item)
             data.pending = true
         else
             local plate, garageId = Framework.GiveVehicle(targetSource, identifier, item)
+            if not plate then
+                data.grantFailed = 'vehicle_failed'
+                return data
+            end
             data.plate = plate
             data.garageId = garageId
         end
@@ -247,6 +249,7 @@ local function flushPending(source)
                 if ok then
                     data.pending = false
                     MySQL.update.await('UPDATE dj_envydonator_owned SET data = ? WHERE id = ?', { json.encode(data), row.id })
+                    Framework.Notify(source, (Locale.pending_delivered):format(item.label or row.label or 'Item'), 'success')
                 end
             end
         end
@@ -297,9 +300,30 @@ local function onlinePlayers()
     return list
 end
 
-local function canBuy(identifier, item)
+local function deliveryMessage(item, data)
+    if data and data.pending then
+        return Locale.pending_grant
+    end
+    if item.model then
+        if data and data.plate then
+            return (Locale.vehicle_granted_plate):format(item.label, data.plate)
+        end
+        return Locale.vehicle_granted
+    end
+    if item.weapon then
+        return (Locale.weapon_granted_named):format(item.label)
+    end
+    return (Locale.item_granted_named):format(item.label)
+end
+
+local function canBuy(identifier, item, source)
     if not item then
         return false, 'invalid'
+    end
+    if item.category == 'gangs' and source and source ~= 0 then
+        if not Discord or not Discord.HasGangAccess(source) then
+            return false, 'no_permission'
+        end
     end
     if item.limitedFrom or item.limitedUntil then
         local active, reason = limitedState(item)
@@ -380,10 +404,11 @@ RegisterDonatorCallback('open', function(source)
     for i = 1, #everyone do
         giftPlayers[#giftPlayers + 1] = { id = everyone[i].id, name = everyone[i].name }
     end
+    local isGangMember = Discord and Discord.HasGangAccess(source) or false
     return {
         ok = true,
         player = snap,
-        catalog = publicCatalog(),
+        catalog = publicCatalog(isGangMember),
         admin = admin,
         players = giftPlayers,
         locale = Locale,
@@ -391,6 +416,10 @@ RegisterDonatorCallback('open', function(source)
         serverName = Config.ServerName,
         keybind = Config.Keybind,
         theme = Config.Theme or 'envy',
+        isGangMember = isGangMember,
+        gangTabLabel = Discord and Discord.TabLabel() or 'Gang Store',
+        discordLinked = Discord and Discord.GetDiscordId(source) ~= nil or false,
+        discordReady = Discord and Discord.Configured() or false,
     }
 end)
 
@@ -403,13 +432,14 @@ RegisterDonatorCallback('purchase', function(source, payload)
     if not identifier or not item then
         return { ok = false, error = 'invalid', message = 'Invalid item.' }
     end
-    local ok, reason = canBuy(identifier, item)
+    local ok, reason = canBuy(identifier, item, source)
     if not ok then
         local messages = {
             expired = Locale.expired,
             not_started = Locale.not_started,
             out_of_stock = Locale.out_of_stock,
             already_owned = Locale.already_owned,
+            no_permission = Locale.gang_locked,
         }
         return { ok = false, error = reason, message = messages[reason] or 'Cannot buy this item.' }
     end
@@ -419,9 +449,9 @@ RegisterDonatorCallback('purchase', function(source, payload)
     end
 
     return withItemLock(item.id, function()
-        local stillOk, stillReason = canBuy(identifier, item)
+        local stillOk, stillReason = canBuy(identifier, item, source)
         if not stillOk then
-            return { ok = false, error = stillReason, message = Locale[stillReason] or 'Cannot buy this item.' }
+            return { ok = false, error = stillReason, message = Locale[stillReason] or Locale.gang_locked or 'Cannot buy this item.' }
         end
         if not DB.TrySpend(identifier, item.price) then
             return { ok = false, error = 'not_enough', message = Locale.not_enough }
@@ -430,7 +460,8 @@ RegisterDonatorCallback('purchase', function(source, payload)
         local data = grantItem(source, identifier, item)
         if data.grantFailed then
             DB.AddCoins(identifier, item.price)
-            return { ok = false, error = 'inventory_full', message = Locale.inventory_full }
+            local failMsg = data.grantFailed == 'vehicle_failed' and Locale.vehicle_failed or Locale.inventory_full
+            return { ok = false, error = data.grantFailed, message = failMsg }
         end
         DB.InsertPurchase(identifier, name, item, item.price, 1, nil)
         if item.stock and remainingStock(item) and remainingStock(item) < 0 then
@@ -445,19 +476,14 @@ RegisterDonatorCallback('purchase', function(source, payload)
             plate = data.plate,
         })
         Webhooks.Purchase(name, identifier, item, item.price)
-        Framework.Notify(source, Locale.purchased, 'success')
+        local delivered = deliveryMessage(item, data)
+        Framework.Notify(source, delivered, 'success')
 
-        if item.model then
-            Framework.Notify(source, Locale.vehicle_granted, 'success')
-        elseif item.weapon then
-            Framework.Notify(source, Locale.weapon_granted, 'success')
-        elseif item.petModel then
+        if item.petModel then
             TriggerClientEvent('djfivem-donatorenvy:client:ownedPetsUpdated', source)
-        else
-            Framework.Notify(source, Locale.item_granted, 'success')
         end
 
-        return { ok = true, player = playerSnapshot(source), granted = data }
+        return { ok = true, player = playerSnapshot(source), granted = data, message = delivered }
     end)
 end)
 
@@ -492,9 +518,9 @@ RegisterDonatorCallback('gift', function(source, payload)
         end
     end
 
-    local ok, reason = canBuy(targetIdentifier, item)
+    local ok, reason = canBuy(targetIdentifier, item, source)
     if not ok then
-        return { ok = false, error = reason, message = Locale[reason] or 'Cannot gift this item.' }
+        return { ok = false, error = reason, message = Locale[reason] or Locale.gang_locked or 'Cannot gift this item.' }
     end
     local invOk, invErr, invMsg = inventoryGate(targetSource, item)
     if not invOk then
@@ -502,9 +528,9 @@ RegisterDonatorCallback('gift', function(source, payload)
     end
 
     return withItemLock(item.id, function()
-        local stillOk, stillReason = canBuy(targetIdentifier, item)
+        local stillOk, stillReason = canBuy(targetIdentifier, item, source)
         if not stillOk then
-            return { ok = false, error = stillReason, message = Locale[stillReason] or 'Cannot gift this item.' }
+            return { ok = false, error = stillReason, message = Locale[stillReason] or Locale.gang_locked or 'Cannot gift this item.' }
         end
         if not DB.TrySpend(buyerId, item.price) then
             return { ok = false, error = 'not_enough', message = Locale.not_enough }
@@ -536,7 +562,7 @@ RegisterDonatorCallback('redeem', function(source, payload)
     end
     local identifier, name = Framework.GetIdentifier(source)
     local code = payload.code and tostring(payload.code):gsub('%s+', ''):upper() or ''
-    if not identifier or code == '' or #code > 32 then
+    if not identifier or code == '' or #code > 64 then
         return { ok = false, error = 'invalid_code', message = Locale.invalid_code }
     end
     local row = DB.GetCode(code)
@@ -559,7 +585,7 @@ RegisterDonatorCallback('redeem', function(source, payload)
     if row.item_id and row.item_id ~= '' then
         item = GetCatalogItem(row.item_id)
         if item then
-            local canOk, canReason = canBuy(identifier, item)
+            local canOk, canReason = canBuy(identifier, item, source)
             if not canOk then
                 return { ok = false, error = canReason, message = Locale[canReason] or 'Cannot redeem this item.' }
             end
@@ -585,8 +611,12 @@ RegisterDonatorCallback('redeem', function(source, payload)
     end
     DB.InsertLog(identifier, name, identifier, name, 'redeem', { code = code, coins = row.coins, item = row.item_id })
     Webhooks.Admin(name, identifier, 'redeem', ('Redeemed code %s for %s %s'):format(code, tostring(row.coins or 0), Config.CurrencyShort))
-    Framework.Notify(source, Locale.redeemed, 'success')
-    return { ok = true, player = playerSnapshot(source) }
+    local msg = Locale.redeemed
+    if row.coins and row.coins > 0 then
+        msg = ('%s (+%s %s)'):format(Locale.redeemed, row.coins, Config.CurrencyShort)
+    end
+    Framework.Notify(source, msg, 'success')
+    return { ok = true, player = playerSnapshot(source), message = msg }
 end)
 
 RegisterDonatorCallback('spawnPet', function(source, payload)
@@ -793,9 +823,38 @@ RegisterDonatorCallback('adminSaveListing', function(source, payload)
     Webhooks.Admin(actorName, actorId, existingId and 'edit_listing' or 'add_listing', ('%s (%s) for %s %s'):format(item.label, item.id, item.price, Config.CurrencyShort))
     return {
         ok = true,
-        catalog = publicCatalog(),
+        catalog = publicCatalog(true),
         admin = adminBundle(),
         player = playerSnapshot(source),
+    }
+end)
+
+RegisterDonatorCallback('lookupOx', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission' }
+    end
+    local name = payload and tostring(payload.name or payload.item or ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if name == '' then
+        return { ok = false, message = Locale.missing_item }
+    end
+    local resolved, data, image
+    if OxInv and OxInv.Describe then
+        resolved, data, image = OxInv.Describe(name)
+    end
+    local label = data and data.label or nil
+    local preview = Images.Resolve({
+        category = payload.category,
+        item = resolved or name,
+        weapon = (payload.category == 'weapons' or name:upper():find('^WEAPON_')) and (resolved or name) or nil,
+        model = payload.model,
+        imageKey = payload.model or resolved or name,
+    })
+    return {
+        ok = resolved ~= nil or preview ~= nil,
+        name = resolved or name,
+        label = label,
+        image = image or preview,
+        registered = resolved ~= nil,
     }
 end)
 
@@ -814,7 +873,7 @@ RegisterDonatorCallback('adminDeleteListing', function(source, payload)
     Webhooks.Admin(actorName, actorId, 'delete_listing', ('Removed %s (`%s`)'):format(existing.label, itemId))
     return {
         ok = true,
-        catalog = publicCatalog(),
+        catalog = publicCatalog(true),
         admin = adminBundle(),
         player = playerSnapshot(source),
     }
@@ -930,7 +989,7 @@ local function tebexGrantCoins(src, args)
     local targetSource, identifier = resolveGrantTarget(args[1])
     local amount = sanitizeAmount(args[2])
     if not identifier or not amount then
-        print('[djfivem-donatorenvy] Usage: envygrant <serverId|identifier> <amount> [reason]')
+        print('[djfivem-donatorenvy] Usage: gemgrant <serverId|identifier> <amount> [reason]')
         return
     end
     adminCoins(src, {
@@ -949,7 +1008,7 @@ local function tebexGrantPackage(src, args)
     local targetSource, identifier, name = resolveGrantTarget(args[1])
     local itemId = args[2] and tostring(args[2]) or ''
     if not identifier or itemId == '' then
-        print('[djfivem-donatorenvy] Usage: envypackage <serverId|identifier> <itemId>')
+        print('[djfivem-donatorenvy] Usage: gempackage <serverId|identifier> <itemId>')
         return
     end
     local item = GetCatalogItem(itemId)
@@ -984,8 +1043,35 @@ local function tebexGrantPackage(src, args)
     return result and result.ok
 end
 
-RegisterCommand((Config.Tebex and Config.Tebex.GrantCommand) or 'envygrant', tebexGrantCoins, true)
-RegisterCommand((Config.Tebex and Config.Tebex.PackageCommand) or 'envypackage', tebexGrantPackage, true)
+local function tebexRegisterCode(src, args)
+    if not ensureAdmin(src) then return end
+    local code = tostring(args[1] or ''):gsub('%s+', ''):upper()
+    local amount = sanitizeAmount(args[2], true) or 0
+    local itemId = args[3] and tostring(args[3]) or nil
+    if itemId == '' then
+        itemId = nil
+    end
+    if code == '' or (amount < 1 and not itemId) then
+        print('[djfivem-donatorenvy] Usage: tbxgems <tbx-id> <gems> [itemId]')
+        return
+    end
+    if itemId and not GetCatalogItem(itemId) then
+        print('[djfivem-donatorenvy] Unknown catalog item: ' .. itemId)
+        return
+    end
+    if DB.GetCode(code) then
+        print('[djfivem-donatorenvy] ' .. Locale.tbx_exists .. ' ' .. code)
+        return
+    end
+    DB.CreateCode(code, amount, itemId, 1, nil, 'tebex')
+    DB.InsertLog('tebex', 'Tebex', nil, nil, 'tbx_code', { code = code, coins = amount, item = itemId })
+    Webhooks.Admin('Tebex', 'tebex', 'tbx_code', ('Registered %s for %s %s'):format(code, amount, Config.CurrencyShort))
+    print(('[djfivem-donatorenvy] %s %s (+%s %s)'):format(Locale.tbx_registered, code, amount, Config.CurrencyShort))
+end
+
+RegisterCommand((Config.Tebex and Config.Tebex.GrantCommand) or 'gemgrant', tebexGrantCoins, true)
+RegisterCommand((Config.Tebex and Config.Tebex.PackageCommand) or 'gempackage', tebexGrantPackage, true)
+RegisterCommand((Config.Tebex and Config.Tebex.RedeemCommand) or 'tbxgems', tebexRegisterCode, true)
 
 AddEventHandler('playerDropped', function()
     cooldowns[source] = nil

@@ -8,6 +8,7 @@ local PREFIX = {
     pets = 'pet',
     exclusives = 'ex',
     limited = 'lim',
+    gangs = 'gang',
 }
 
 local CATEGORIES = {
@@ -18,6 +19,7 @@ local CATEGORIES = {
     pets = true,
     exclusives = true,
     limited = true,
+    gangs = true,
 }
 
 local TIERS = {
@@ -94,6 +96,14 @@ local function parseExtras(payload)
     return extras
 end
 
+local function prettyName(value)
+    local s = trim(value):gsub('^WEAPON_', ''):gsub('[_%-]+', ' ')
+    s = s:gsub('(%a)([%w]*)', function(first, rest)
+        return first:upper() .. rest:lower()
+    end)
+    return trim(s)
+end
+
 local function uniqueId(category, label, requested)
     local base = trim(requested)
     if base == '' then
@@ -119,7 +129,21 @@ function Listings.Normalize(payload, existingId)
     if not CATEGORIES[category] then
         return nil, 'invalid_category'
     end
+    local itemName = trim(payload.itemName or payload.item or payload.weapon or '')
+    local model = trim(payload.model or '')
     local label = trim(payload.label or payload.name)
+    if label == '' then
+        if model ~= '' then
+            label = prettyName(model)
+        elseif itemName ~= '' then
+            local oxLabel
+            if OxInv and OxInv.Describe then
+                local _, data = OxInv.Describe(itemName)
+                oxLabel = data and data.label
+            end
+            label = oxLabel or prettyName(itemName)
+        end
+    end
     if label == '' then
         return nil, 'invalid_label'
     end
@@ -127,9 +151,6 @@ function Listings.Normalize(payload, existingId)
     if not price or price < 0 then
         return nil, 'invalid_price'
     end
-
-    local itemName = trim(payload.itemName or payload.item or payload.weapon or '')
-    local model = trim(payload.model or '')
     local petModel = trim(payload.petModel or '')
     local image = trim(payload.image or payload.imageUrl or '')
     local count = math.max(1, toInt(payload.count, 1))
@@ -139,13 +160,13 @@ function Listings.Normalize(payload, existingId)
         stock = nil
     end
     local tier = trim(payload.tier)
-    if category ~= 'vehicles' and category ~= 'weapons' then
-        tier = nil
-    else
+    if category == 'vehicles' then
         tier = NormalizeTier(tier)
         if not TIERS[tier] then
             tier = 'emerald'
         end
+    else
+        tier = nil
     end
 
     local extras = parseExtras(payload)
@@ -156,7 +177,7 @@ function Listings.Normalize(payload, existingId)
     if category == 'weapons' and itemName == '' then
         return nil, 'missing_item'
     end
-    if category == 'extras' and itemName == '' then
+    if (category == 'extras' or category == 'gangs') and itemName == '' and model == '' then
         return nil, 'missing_item'
     end
     if category == 'bundles' and #extras < 2 then
