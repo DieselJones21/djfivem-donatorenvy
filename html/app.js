@@ -152,7 +152,7 @@ function mockNormalizeListing(data) {
     const category = data.category || 'extras';
     const itemName = String(data.itemName || data.item || '').trim();
     const model = String(data.model || '').trim();
-    const pretty = (value) => String(value || '').replace(/^WEAPON_/i, '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+    const pretty = (value) => String(value || '').replace(/^WEAPON_/i, '').replace(/[_-]+/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).trim();
     const label = String(data.label || '').trim() || pretty(model || itemName);
     const price = Number(data.price);
     if (!label) return { ok: false, message: 'Enter a display name, spawn name, or ox item name.' };
@@ -261,6 +261,7 @@ async function post(name, data = {}) {
             if (!item) return { ok: false, message: 'Invalid item.' };
             if (state.player.coins < item.price) return { ok: false, message: `You do not have enough ${state.currency.name}.` };
             state.player.coins -= item.price;
+            state.player.lifetimeSpent = (state.player.lifetimeSpent || 0) + item.price;
             state.player.owned.unshift({ id: Date.now(), item_id: item.id, category: item.category || state.tab, label: item.label, active: 1, created_at: new Date().toISOString() });
             state.player.history.unshift({ id: Date.now(), label: item.label, category: item.category || state.tab, price: item.price, created_at: new Date().toISOString() });
             const self = (state.admin.players || []).find((p) => p.id === state.player.serverId);
@@ -270,7 +271,7 @@ async function post(name, data = {}) {
         if (name === 'lookupOx') {
             const raw = String(data.name || data.model || '').trim();
             if (!raw) return { ok: false };
-            const pretty = raw.replace(/^WEAPON_/i, '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            const pretty = raw.replace(/^WEAPON_/i, '').replace(/[_-]+/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
             return { ok: true, name: raw, label: pretty, registered: true, image: '' };
         }
         if (name === 'redeem') {
@@ -709,7 +710,7 @@ function renderDashboard() {
                     <div class="veil"></div>
                     <div class="hero-copy">
                         <h2>Envy Store</h2>
-                        <p>Spend Gems on rides, weapons, and packs. Buy Gems on Tebex, then redeem your tbx- ID here.</p>
+                        <p>Spend Gems on rides, weapons, and packs. Buy Gems on Tebex, then redeem your Payment ID (tbx-xxxxxxxx) here.</p>
                         <button class="btn add" data-goto="vehicles">Shop vehicles →</button>
                     </div>
                 </div>
