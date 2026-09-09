@@ -101,6 +101,30 @@ RegisterNUICallback('adminDeleteListing', function(data, cb)
     cb(DonatorCallback('adminDeleteListing', data) or { ok = false })
 end)
 
+RegisterNUICallback('adminSaveCategory', function(data, cb)
+    cb(DonatorCallback('adminSaveCategory', data) or { ok = false })
+end)
+
+RegisterNUICallback('adminDeleteCategory', function(data, cb)
+    cb(DonatorCallback('adminDeleteCategory', data) or { ok = false })
+end)
+
+RegisterNUICallback('adminMoveCategory', function(data, cb)
+    cb(DonatorCallback('adminMoveCategory', data) or { ok = false })
+end)
+
+RegisterNUICallback('adminSaveTier', function(data, cb)
+    cb(DonatorCallback('adminSaveTier', data) or { ok = false })
+end)
+
+RegisterNUICallback('adminDeleteTier', function(data, cb)
+    cb(DonatorCallback('adminDeleteTier', data) or { ok = false })
+end)
+
+RegisterNUICallback('adminMoveTier', function(data, cb)
+    cb(DonatorCallback('adminMoveTier', data) or { ok = false })
+end)
+
 RegisterNUICallback('lookupOx', function(data, cb)
     cb(DonatorCallback('lookupOx', data) or { ok = false })
 end)

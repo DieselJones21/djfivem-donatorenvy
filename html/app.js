@@ -17,36 +17,85 @@ const ICONS = {
 
 const GEM = '<svg class="gem" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 7-8 13L4 9l8-7zm0 3.2L7.2 9h9.6L12 5.2z"/></svg>';
 
-const TABS = [
-    { id: 'dashboard', label: 'Main Page' },
-    { id: 'vehicles', label: 'Vehicles' },
-    { id: 'weapons', label: 'Weapons' },
-    { id: 'extras', label: 'Extra Items' },
-    { id: 'bundles', label: 'Bundles' },
-    { id: 'gangs', label: 'Gang Store', gang: true },
-    { id: 'exclusives', label: 'City Exclusives' },
-    { id: 'limited', label: 'Limited Time' },
-    { id: 'inventory', label: 'Inventory' },
-    { id: 'admin', label: 'Admin', admin: true },
-];
-
 const THEMES = ['envy', 'miami', 'rebel', 'crimson', 'ocean', 'gold', 'emerald', 'violet'];
-const TIER_IDS = ['emerald', 'sapphire', 'blackdiamond'];
-const TIER_LABELS = { emerald: 'Emerald', sapphire: 'Sapphire', blackdiamond: 'Black Diamond' };
+const DEFAULT_CATEGORIES = [
+    { id: 'vehicles', label: 'Vehicles', grantType: 'vehicle', usesTiers: true, gated: 'none', timed: false, builtin: true, enabled: true, sort: 10 },
+    { id: 'weapons', label: 'Weapons', grantType: 'weapon', usesTiers: false, gated: 'none', timed: false, builtin: true, enabled: true, sort: 20 },
+    { id: 'extras', label: 'Extra Items', grantType: 'item', usesTiers: false, gated: 'none', timed: false, builtin: true, enabled: true, sort: 30 },
+    { id: 'bundles', label: 'Bundles', grantType: 'bundle', usesTiers: false, gated: 'none', timed: false, builtin: true, enabled: true, sort: 40 },
+    { id: 'gangs', label: 'Gang Store', grantType: 'mixed', usesTiers: false, gated: 'gang', timed: false, builtin: true, enabled: true, sort: 50 },
+    { id: 'exclusives', label: 'City Exclusives', grantType: 'mixed', usesTiers: false, gated: 'none', timed: false, builtin: true, enabled: true, sort: 60 },
+    { id: 'limited', label: 'Limited Time', grantType: 'mixed', usesTiers: false, gated: 'none', timed: true, builtin: true, enabled: true, sort: 70 },
+];
+const DEFAULT_TIERS = [
+    { id: 'emerald', label: 'Emerald', builtin: true, enabled: true, sort: 10 },
+    { id: 'sapphire', label: 'Sapphire', builtin: true, enabled: true, sort: 20 },
+    { id: 'blackdiamond', label: 'Black Diamond', builtin: true, enabled: true, sort: 30 },
+];
 const TIER_ALIASES = { bronze: 'emerald', silver: 'sapphire', gold: 'blackdiamond', black_diamond: 'blackdiamond', diamond: 'blackdiamond' };
 
+function liveCategories() {
+    const src = (state.categories && state.categories.length) ? state.categories : DEFAULT_CATEGORIES;
+    return src.filter((c) => c.id !== 'pets' && c.enabled !== false);
+}
+
+function adminCategories() {
+    const src = (state.admin && state.admin.categories && state.admin.categories.length)
+        ? state.admin.categories
+        : DEFAULT_CATEGORIES;
+    return src.filter((c) => c.id !== 'pets');
+}
+
+function liveTiers() {
+    const src = (state.tiers && state.tiers.length)
+        ? state.tiers.filter((t) => t.enabled !== false)
+        : DEFAULT_TIERS;
+    return src.length ? src : DEFAULT_TIERS;
+}
+
+function adminTiers() {
+    return (state.admin && state.admin.tiers && state.admin.tiers.length) ? state.admin.tiers : liveTiers();
+}
+
+function shopCategory(id) {
+    return adminCategories().find((c) => c.id === id)
+        || liveCategories().find((c) => c.id === id)
+        || { id, label: id, grantType: 'item', usesTiers: false };
+}
+
+function shopTabs() {
+    const tabs = [{ id: 'dashboard', label: 'Main Page' }];
+    liveCategories().forEach((cat) => {
+        tabs.push({
+            id: cat.id,
+            label: cat.label,
+            gang: cat.gated === 'gang',
+            usesTiers: Boolean(cat.usesTiers),
+            grantType: cat.grantType,
+        });
+    });
+    tabs.push({ id: 'inventory', label: 'Inventory' });
+    tabs.push({ id: 'admin', label: 'Admin', admin: true });
+    return tabs;
+}
+
 function normalizeTier(tier) {
-    if (!tier) return 'emerald';
+    const ids = liveTiers().map((row) => row.id);
+    const fallback = ids[0] || 'emerald';
+    if (!tier) return fallback;
     const raw = String(tier).toLowerCase();
     const compact = raw.replace(/[\s_-]+/g, '');
-    if (TIER_ALIASES[raw] || TIER_ALIASES[compact]) return TIER_ALIASES[raw] || TIER_ALIASES[compact];
-    if (TIER_IDS.includes(raw)) return raw;
-    if (TIER_IDS.includes(compact)) return compact;
-    return 'emerald';
+    const mapped = TIER_ALIASES[raw] || TIER_ALIASES[compact];
+    if (mapped && ids.includes(mapped)) return mapped;
+    if (ids.includes(raw)) return raw;
+    if (ids.includes(compact)) return compact;
+    return fallback;
 }
 
 function tierLabel(tier) {
-    return TIER_LABELS[normalizeTier(tier)] || 'Emerald';
+    const id = normalizeTier(tier);
+    const row = liveTiers().find((t) => t.id === id) || adminTiers().find((t) => t.id === id);
+    return row?.label || id;
 }
 
 function normalizeTheme(name) {
@@ -71,35 +120,36 @@ const state = {
     theme: 'envy',
     isGangMember: false,
     gangTabLabel: 'Gang Store',
+    categories: DEFAULT_CATEGORIES,
+    tiers: DEFAULT_TIERS,
+    tebex: null,
+    shopTier: 'all',
 };
 
 function emptyCatalog() {
-    return {
-        vehicles: { emerald: [], sapphire: [], blackdiamond: [] },
-        weapons: [],
-        extras: [],
-        bundles: [],
-        pets: [],
-        exclusives: [],
-        limited: [],
-        gangs: [],
-    };
+    const catalog = { pets: [] };
+    (state.categories || DEFAULT_CATEGORIES).concat(adminCategories()).forEach((cat) => {
+        if (!cat?.id || catalog[cat.id]) return;
+        catalog[cat.id] = cat.usesTiers ? Object.fromEntries(liveTiers().map((tier) => [tier.id, []])) : [];
+    });
+    DEFAULT_CATEGORIES.forEach((cat) => {
+        if (!catalog[cat.id]) catalog[cat.id] = cat.usesTiers ? Object.fromEntries(liveTiers().map((tier) => [tier.id, []])) : [];
+    });
+    return catalog;
 }
 
 function putListing(catalog, item) {
     const copy = { ...item };
-    if (item.category === 'vehicles') {
+    const cat = shopCategory(item.category);
+    if (cat.usesTiers) {
         const tier = normalizeTier(item.tier);
-        catalog.vehicles[tier] = catalog.vehicles[tier] || [];
-        catalog.vehicles[tier].push(copy);
-    } else if (item.category === 'weapons') {
-        if (!Array.isArray(catalog.weapons)) catalog.weapons = [];
-        catalog.weapons.push(copy);
-    } else if (catalog[item.category]) {
-        catalog[item.category].push(copy);
-    } else {
-        catalog.extras.push(copy);
+        catalog[cat.id] = catalog[cat.id] || {};
+        catalog[cat.id][tier] = catalog[cat.id][tier] || [];
+        catalog[cat.id][tier].push({ ...copy, tier });
+        return;
     }
+    if (!Array.isArray(catalog[item.category])) catalog[item.category] = [];
+    catalog[item.category].push(copy);
 }
 
 function catalogFromListings(listings) {
@@ -144,6 +194,10 @@ function previewCatalog() {
             id: 'gang_switch', category: 'gangs', label: 'Gang Switchblade',
             description: 'Gang-only sidearm. Visible only to Discord gang roles.', price: 1200, item: 'WEAPON_SWITCHBLADE', weapon: 'WEAPON_SWITCHBLADE',
         }),
+        decoratePreviewItem({
+            id: 'imp_rebla', category: 'imports', tier: 'ruby', label: 'Ubermacht Rebla',
+            description: 'Import-only donor car in the Ruby vehicle tier.', price: 6200, remaining: 4, model: 'rebla',
+        }),
     ].forEach((item) => putListing(catalog, item));
     return catalog;
 }
@@ -161,9 +215,10 @@ function mockNormalizeListing(data) {
     const bundleItems = (Array.isArray(data.bundleItems) ? data.bundleItems : [])
         .map((row) => ({ item: String(row.item || '').trim(), count: Math.max(1, Number(row.count) || 1) }))
         .filter((row) => row.item);
-    if (category === 'vehicles' && !model) return { ok: false, message: 'Vehicle listings need a spawn name.' };
-    if ((category === 'weapons' || category === 'extras' || category === 'gangs') && !itemName && !model) return { ok: false, message: 'Enter the ox_inventory item name.' };
     if (category === 'bundles' && bundleItems.length < 2) return { ok: false, message: 'Add at least two ox_inventory items to the bundle.' };
+    const cat = shopCategory(category);
+    if (cat.grantType === 'vehicle' && !model) return { ok: false, message: 'Vehicle listings need a spawn name.' };
+    if ((cat.grantType === 'weapon' || cat.grantType === 'item') && !itemName && !model) return { ok: false, message: 'Enter the ox_inventory item name.' };
     const id = data.editingId || data.id || `${category.slice(0, 3)}_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
     const extras = category === 'bundles'
         ? bundleItems
@@ -171,7 +226,7 @@ function mockNormalizeListing(data) {
     const item = {
         id,
         category,
-        tier: category === 'vehicles' ? normalizeTier(data.tier) : undefined,
+        tier: shopCategory(category).usesTiers ? normalizeTier(data.tier) : undefined,
         label,
         description: data.description || '',
         price,
@@ -199,7 +254,35 @@ function mockNormalizeListing(data) {
     return { ok: true, item };
 }
 
+function mockShopLayout() {
+    return {
+        categories: [
+            ...DEFAULT_CATEGORIES,
+            { id: 'imports', label: 'Imports', grantType: 'vehicle', usesTiers: true, gated: 'none', timed: false, builtin: false, enabled: true, sort: 25 },
+        ],
+        tiers: [
+            ...DEFAULT_TIERS,
+            { id: 'ruby', label: 'Ruby', builtin: false, enabled: true, sort: 40 },
+        ],
+        tebex: {
+            storeUrl: 'https://envyroleplay.tebex.io',
+            playerRedeem: 'redeem',
+            commands: [
+                { id: 'gems_redeem', title: 'Gems pack (player pastes tbx- ID)', command: 'tbxgems {transaction} 500' },
+                { id: 'gems_instant', title: 'Instant Gems (Tebex plugin linked)', command: 'givegems {id} 500' },
+                { id: 'package_instant', title: 'Instant listing (Tebex plugin linked)', command: 'givepackage {id} LISTING_ID' },
+                { id: 'package_redeem', title: 'Listing the player redeems later', command: 'tbxpackage {transaction} LISTING_ID' },
+            ],
+        },
+    };
+}
+
 function mockOpen() {
+    const layout = mockShopLayout();
+    state.categories = layout.categories;
+    state.tiers = layout.tiers;
+    state.tebex = layout.tebex;
+    state.admin = { ...(state.admin || {}), categories: layout.categories, tiers: layout.tiers, tebex: layout.tebex };
     return {
         ok: true,
         serverName: 'Envy Roleplay',
@@ -208,6 +291,9 @@ function mockOpen() {
         isGangMember: true,
         gangTabLabel: 'Gang Store',
         locale: {},
+        categories: layout.categories,
+        tiers: layout.tiers,
+        tebex: layout.tebex,
         player: {
             name: 'MoodyNewt8638',
             serverId: 1,
@@ -242,12 +328,16 @@ function mockOpen() {
             ],
             logs: [],
             codes: [],
+            categories: layout.categories,
+            tiers: layout.tiers,
+            tebex: layout.tebex,
             listings: [
                 { id: 'veh_sultan', category: 'vehicles', tier: 'blackdiamond', label: 'Karin Sultan', price: 8750, model: 'sultan' },
                 { id: 'wep_pistol', category: 'weapons', label: 'Combat Pistol', price: 2450, item: 'WEAPON_PISTOL', weapon: 'WEAPON_PISTOL' },
                 { id: 'gang_switch', category: 'gangs', label: 'Gang Switchblade', price: 1200, item: 'WEAPON_SWITCHBLADE', weapon: 'WEAPON_SWITCHBLADE' },
                 { id: 'ext_armour', category: 'extras', label: 'Armour Pack', price: 400, item: 'armour', extras: [{ item: 'armour', count: 5 }] },
                 { id: 'bdl_starter', category: 'bundles', label: 'Starter Kit', price: 250, extras: [{ item: 'armour', count: 5 }, { item: 'bandage', count: 10 }, { item: 'lockpick', count: 2 }] },
+                { id: 'imp_rebla', category: 'imports', tier: 'ruby', label: 'Ubermacht Rebla', price: 6200, model: 'rebla' },
             ],
         },
     };
@@ -330,6 +420,98 @@ async function post(name, data = {}) {
             state.catalog = catalogFromListings(state.admin.listings);
             return { ok: true, catalog: state.catalog, admin: state.admin, player: state.player };
         }
+        if (name === 'adminSaveCategory') {
+            const label = String(data.label || '').trim();
+            if (!label) return { ok: false, message: 'Enter a tab name.' };
+            const id = String(data.id || label.toLowerCase().replace(/[^a-z0-9]+/g, '_')).replace(/^_|_$/g, '');
+            const existing = (state.admin.categories || []).find((row) => row.id === id);
+            const row = {
+                id,
+                label,
+                grantType: existing?.builtin ? existing.grantType : (data.grantType || 'item'),
+                usesTiers: existing?.builtin ? existing.usesTiers : Boolean(data.usesTiers) || data.grantType === 'vehicle',
+                gated: data.gated === 'gang' ? 'gang' : 'none',
+                timed: existing?.timed || false,
+                builtin: Boolean(existing?.builtin),
+                enabled: data.enabled !== false,
+                sort: existing?.sort || ((state.admin.categories || []).length + 1) * 10,
+            };
+            state.admin.categories = (state.admin.categories || []).filter((c) => c.id !== id);
+            state.admin.categories.push(row);
+            state.admin.categories.sort((a, b) => a.sort - b.sort);
+            state.categories = state.admin.categories.filter((c) => c.enabled !== false);
+            state.catalog = catalogFromListings(state.admin.listings);
+            return { ok: true, message: 'Shop tab saved.', catalog: state.catalog, admin: state.admin, player: state.player, categories: state.categories, tiers: state.tiers };
+        }
+        if (name === 'adminDeleteCategory') {
+            const cat = (state.admin.categories || []).find((row) => row.id === data.id);
+            if (!cat) return { ok: false, message: 'Pick a shop category.' };
+            if (cat.builtin) {
+                cat.enabled = false;
+            } else {
+                if ((state.admin.listings || []).some((row) => row.category === cat.id)) {
+                    return { ok: false, message: 'Move or delete the listings in that tab first.' };
+                }
+                state.admin.categories = state.admin.categories.filter((row) => row.id !== cat.id);
+            }
+            state.categories = (state.admin.categories || []).filter((c) => c.enabled !== false);
+            if (state.tab === data.id) state.tab = 'dashboard';
+            return { ok: true, message: cat.builtin ? 'Built-in tab hidden. Add it back from Admin if you want it again.' : 'Shop tab removed.', catalog: state.catalog, admin: state.admin, player: state.player, categories: state.categories, tiers: state.tiers };
+        }
+        if (name === 'adminMoveCategory') {
+            const list = state.admin.categories || [];
+            const index = list.findIndex((row) => row.id === data.id);
+            const swap = index + Number(data.direction || 0);
+            if (index < 0 || swap < 0 || swap >= list.length) return { ok: true, admin: state.admin, categories: state.categories };
+            const aSort = list[index].sort;
+            list[index].sort = list[swap].sort;
+            list[swap].sort = aSort;
+            list.sort((a, b) => a.sort - b.sort);
+            state.categories = list.filter((c) => c.enabled !== false);
+            return { ok: true, admin: state.admin, categories: state.categories, tiers: state.tiers };
+        }
+        if (name === 'adminSaveTier') {
+            const label = String(data.label || '').trim();
+            if (!label) return { ok: false, message: 'Enter a tier name.' };
+            const id = String(data.id || label.toLowerCase().replace(/[^a-z0-9]+/g, '_')).replace(/^_|_$/g, '');
+            const existing = (state.admin.tiers || []).find((row) => row.id === id);
+            const row = {
+                id,
+                label,
+                builtin: Boolean(existing?.builtin),
+                enabled: true,
+                sort: existing?.sort || ((state.admin.tiers || []).length + 1) * 10,
+            };
+            state.admin.tiers = (state.admin.tiers || []).filter((t) => t.id !== id);
+            state.admin.tiers.push(row);
+            state.admin.tiers.sort((a, b) => a.sort - b.sort);
+            state.tiers = state.admin.tiers.filter((t) => t.enabled !== false);
+            return { ok: true, message: 'Vehicle tier saved.', admin: state.admin, catalog: state.catalog, player: state.player, categories: state.categories, tiers: state.tiers };
+        }
+        if (name === 'adminDeleteTier') {
+            const list = state.admin.tiers || [];
+            if (list.filter((t) => t.enabled !== false).length <= 1) return { ok: false, message: 'Keep at least one vehicle tier.' };
+            const fallback = list.find((t) => t.id !== data.id)?.id;
+            (state.admin.listings || []).forEach((row) => {
+                if (row.tier === data.id) row.tier = fallback;
+            });
+            state.admin.tiers = list.filter((t) => t.id !== data.id);
+            state.tiers = state.admin.tiers;
+            state.catalog = catalogFromListings(state.admin.listings);
+            return { ok: true, message: 'Vehicle tier removed. Listings were moved to another tier.', admin: state.admin, catalog: state.catalog, player: state.player, categories: state.categories, tiers: state.tiers };
+        }
+        if (name === 'adminMoveTier') {
+            const list = state.admin.tiers || [];
+            const index = list.findIndex((row) => row.id === data.id);
+            const swap = index + Number(data.direction || 0);
+            if (index < 0 || swap < 0 || swap >= list.length) return { ok: true, admin: state.admin, tiers: state.tiers };
+            const aSort = list[index].sort;
+            list[index].sort = list[swap].sort;
+            list[swap].sort = aSort;
+            list.sort((a, b) => a.sort - b.sort);
+            state.tiers = list.filter((t) => t.enabled !== false);
+            return { ok: true, admin: state.admin, categories: state.categories, tiers: state.tiers };
+        }
         return { ok: true, player: state.player, admin: state.admin, lookup: state.lookup };
     }
     const res = await fetch(`https://${RESOURCE}/${name}`, {
@@ -367,6 +549,11 @@ function applyPayload(payload) {
     if (payload.theme) state.theme = normalizeTheme(payload.theme);
     if (payload.isGangMember !== undefined) state.isGangMember = Boolean(payload.isGangMember);
     if (payload.gangTabLabel) state.gangTabLabel = payload.gangTabLabel;
+    if (payload.categories) state.categories = payload.categories;
+    if (payload.tiers) state.tiers = payload.tiers;
+    if (payload.tebex) state.tebex = payload.tebex;
+    if (payload.admin?.categories) state.categories = payload.categories || state.categories;
+    if (payload.admin?.tebex) state.tebex = payload.admin.tebex;
 }
 
 function applyTheme(name) {
@@ -393,7 +580,7 @@ function closeUI() {
 function weaponList(cat) {
     const w = cat?.weapons;
     if (Array.isArray(w)) return w.map((i) => ({ ...i, category: 'weapons' }));
-    return TIER_IDS.flatMap((tier) => (w?.[tier] || []).map((i) => ({ ...i, category: 'weapons', tier })));
+    return liveTiers().flatMap((tier) => (w?.[tier.id] || []).map((i) => ({ ...i, category: 'weapons', tier: tier.id })));
 }
 
 function findItem(itemId) {
@@ -428,17 +615,37 @@ function remainingLabel(item) {
 function allCatalogItems() {
     const cat = state.catalog || emptyCatalog();
     const out = [];
-    TIER_IDS.forEach((tier) => {
-        (cat.vehicles?.[tier] || []).forEach((item) => out.push({ ...item, category: 'vehicles', tier }));
+    const seen = new Set();
+    liveCategories().forEach((row) => {
+        if (row.usesTiers) {
+            const groups = cat[row.id] || {};
+            if (Array.isArray(groups)) {
+                groups.forEach((item) => out.push({ ...item, category: row.id }));
+            } else {
+                liveTiers().forEach((tier) => {
+                    (groups[tier.id] || []).forEach((item) => out.push({ ...item, category: row.id, tier: tier.id }));
+                });
+                Object.keys(groups).forEach((tier) => {
+                    if (liveTiers().some((t) => t.id === tier)) return;
+                    (groups[tier] || []).forEach((item) => out.push({ ...item, category: row.id, tier }));
+                });
+            }
+        } else {
+            (Array.isArray(cat[row.id]) ? cat[row.id] : []).forEach((item) => out.push({ ...item, category: row.id }));
+        }
+        seen.add(row.id);
     });
-    weaponList(cat).forEach((item) => out.push(item));
-    ['extras', 'bundles', 'pets', 'exclusives', 'limited', 'gangs'].forEach((key) => {
-        (cat[key] || []).forEach((item) => out.push({ ...item, category: key }));
+    Object.keys(cat).forEach((key) => {
+        if (seen.has(key) || key === 'pets') return;
+        const bucket = cat[key];
+        if (Array.isArray(bucket)) bucket.forEach((item) => out.push({ ...item, category: key }));
     });
     return out;
 }
 
 function categoryLabel(item) {
+    const cat = shopCategory(item.category);
+    if (cat?.label) return cat.label.toUpperCase();
     return ({
         vehicles: 'VEHICLE',
         weapons: 'WEAPON',
@@ -453,13 +660,13 @@ function categoryLabel(item) {
 
 function renderTabs() {
     const nav = document.getElementById('tabs');
-    nav.innerHTML = TABS.filter((tab) => {
+    nav.innerHTML = shopTabs().filter((tab) => {
         if (tab.admin) return Boolean(state.player?.isAdmin);
         if (tab.gang) return Boolean(state.isGangMember || state.player?.isAdmin);
         return true;
     }).map((tab) => `
         <button class="tab ${state.tab === tab.id ? 'active' : ''}" data-tab="${tab.id}">
-            ${ICONS[tab.id] || ''} ${tab.id === 'gangs' ? escapeHtml(state.gangTabLabel || tab.label) : tab.label}
+            ${ICONS[tab.id] || ICONS.extras} ${escapeHtml(tab.label)}
         </button>
     `).join('');
     nav.querySelectorAll('.tab').forEach((btn) => {
@@ -532,7 +739,7 @@ function itemCard(item, extra = {}) {
         : '';
     let badge = '';
     if (extra.featured || item.category === 'bundles') badge = '<div class="tierchip popular">POPULAR</div>';
-    else if (tier && item.category === 'vehicles') badge = `<div class="tierchip ${normalizeTier(tier)}">${escapeHtml(tierLabel(tier))}</div>`;
+    if (tier && shopCategory(item.category).usesTiers) badge = `<div class="tierchip ${normalizeTier(tier)}">${escapeHtml(tierLabel(tier))}</div>`;
     else if (item.limitedUntil) badge = '<div class="tierchip limited">LIMITED</div>';
     const remaining = item.remaining;
     const stock = remaining != null
@@ -593,8 +800,9 @@ function shopListFor(kind, tier) {
     if (Array.isArray(groups)) {
         return groups.map((item) => ({ ...item, category: kind }));
     }
+    const ids = liveTiers().map((row) => row.id);
     if (tier === 'all') {
-        return TIER_IDS.flatMap((name) =>
+        return ids.flatMap((name) =>
             (groups[name] || []).map((item) => ({ ...item, category: kind, tier: normalizeTier(item.tier || name) }))
         );
     }
@@ -602,10 +810,10 @@ function shopListFor(kind, tier) {
 }
 
 function tierPills(kind) {
-    const current = kind === 'vehicles' ? state.vehicleTier : state.weaponTier;
+    const current = state.shopTier || 'all';
     return `
         <div class="pills" id="tierPills">
-            ${['all', ...TIER_IDS].map((tier) => `<button class="pill ${tier} ${current === tier ? 'active' : ''}" data-tier="${tier}">${tier === 'all' ? 'All' : tierLabel(tier)}</button>`).join('')}
+            ${['all', ...liveTiers().map((row) => row.id)].map((tier) => `<button class="pill ${tier} ${current === tier ? 'active' : ''}" data-tier="${tier}">${tier === 'all' ? 'All' : tierLabel(tier)}</button>`).join('')}
         </div>
     `;
 }
@@ -620,15 +828,18 @@ function filterList(list) {
     });
 }
 
-function renderVehicles() {
-    const tier = state.vehicleTier;
-    const list = filterList(shopListFor('vehicles', tier));
+function renderTierShop(key, title, sub) {
+    const list = filterList(shopListFor(key, state.shopTier || 'all'));
     return `
         <section class="panel">
-            ${shopToolbar('Vehicles', 'Pick a spawn name in Admin — the car is stored in JG garages after purchase.', tierPills('vehicles'))}
-            <div class="grid">${list.map((item) => itemCard(item, { tier: item.tier })).join('') || '<div class="empty">No vehicles in this tier yet. Admins add them from the Admin tab.</div>'}</div>
+            ${shopToolbar(title, sub, tierPills(key))}
+            <div class="grid">${list.map((item) => itemCard(item, { tier: item.tier })).join('') || '<div class="empty">No listings in this tier yet. Admins add them from the Admin tab.</div>'}</div>
         </section>
     `;
+}
+
+function renderVehicles() {
+    return renderTierShop('vehicles', shopCategory('vehicles').label || 'Vehicles', 'Pick a spawn name in Admin — the car is stored in JG garages after purchase.');
 }
 
 function renderWeapons() {
@@ -636,7 +847,8 @@ function renderWeapons() {
 }
 
 function renderSimpleShop(key, title, sub) {
-    const list = filterList(state.catalog?.[key] || []);
+    const raw = state.catalog?.[key];
+    const list = filterList(Array.isArray(raw) ? raw.map((item) => ({ ...item, category: key })) : shopListFor(key, 'all'));
     return `
         <section class="panel">
             ${shopToolbar(title, sub)}
@@ -711,7 +923,7 @@ function renderDashboard() {
                     <div class="hero-copy">
                         <h2>Envy Store</h2>
                         <p>Spend Gems on rides, weapons, and packs. Buy Gems on Tebex, then redeem your Payment ID (tbx-xxxxxxxx) here.</p>
-                        <button class="btn add" data-goto="vehicles">Shop vehicles →</button>
+                        <button class="btn add" data-goto="${liveCategories().find((c) => c.grantType === 'vehicle')?.id || liveCategories()[0]?.id || 'dashboard'}">Shop now →</button>
                     </div>
                 </div>
                 <div class="member-card">
@@ -833,25 +1045,44 @@ function readListingForm() {
 function updateListingHint() {
     const hint = document.getElementById('listHint');
     if (!hint) return;
-    const category = listingVal('listCategory') || 'extras';
+    const cat = shopCategory(listingVal('listCategory') || 'extras');
     const copy = {
-        vehicles: 'Type the spawn name (sultan). Display name and image key fill in automatically. Vehicle goes to JG garages on buy.',
-        weapons: 'Type the ox_inventory weapon (WEAPON_PISTOL). The image comes from ox_inventory/web/images. No tiers.',
-        extras: 'Type the ox_inventory item (armour). Image uses Fivemanage, then ox_inventory if that file is missing.',
-        bundles: 'Add two or more ox items. Players get the whole package in one purchase.',
-        gangs: 'Same as a normal listing, but only Discord gang-role players see the Gang tab.',
-        exclusives: 'Unique city drop. Set a spawn name or ox item, then Save.',
-        limited: 'Timed listing. Set the until date in More options.',
+        vehicle: 'Type the spawn name (sultan). Display name fills in automatically. Vehicle goes to JG garages on buy.',
+        weapon: 'Type the ox_inventory weapon (WEAPON_PISTOL). The image comes from ox_inventory/web/images.',
+        item: 'Type the ox_inventory item (armour). Image uses Fivemanage, then ox_inventory if that file is missing.',
+        bundle: 'Add two or more ox items. Players get the whole package in one purchase.',
+        mixed: 'Set a spawn name or ox item, then Save. Use More options for garage, ammo, or timed windows.',
     };
-    hint.textContent = copy[category] || copy.extras;
+    if (cat.gated === 'gang') {
+        hint.textContent = 'Same as a normal listing, but only Discord gang-role players see this tab.';
+        return;
+    }
+    hint.textContent = copy[cat.grantType] || copy.item;
 }
 
 function toggleListingFields() {
-    const category = listingVal('listCategory') || 'extras';
+    const cat = shopCategory(listingVal('listCategory') || 'extras');
+    const grant = cat.grantType || 'item';
+    const show = {
+        all: true,
+        tier: Boolean(cat.usesTiers),
+        model: grant === 'vehicle' || grant === 'mixed',
+        item: grant === 'weapon' || grant === 'item' || grant === 'mixed',
+        count: grant === 'item' || grant === 'mixed',
+        bundle: grant === 'bundle',
+        garage: grant === 'vehicle' || grant === 'mixed',
+        ammo: grant === 'weapon' || grant === 'mixed',
+        timed: Boolean(cat.timed) || cat.id === 'limited',
+    };
+    document.querySelectorAll('[data-need]').forEach((el) => {
+        const need = el.dataset.need;
+        el.classList.toggle('hidden-field', !show[need]);
+    });
     document.querySelectorAll('[data-for]').forEach((el) => {
+        if (el.dataset.need) return;
         const allow = (el.dataset.for || '').split(/\s+/).filter(Boolean);
-        const show = allow.includes('all') || allow.includes(category);
-        el.classList.toggle('hidden-field', !show);
+        const showFor = allow.includes('all') || allow.includes(cat.id) || allow.includes(grant);
+        el.classList.toggle('hidden-field', !showFor);
     });
     const preview = document.getElementById('listImagePreview');
     const url = listingVal('listImage');
@@ -902,7 +1133,7 @@ function fillListingForm(item) {
     set('listEditingId', item?.id || '');
     set('listId', item?.id || '');
     set('listCategory', item?.category || 'extras');
-    set('listTier', item?.tier ? normalizeTier(item.tier) : 'emerald');
+    set('listTier', item?.tier ? normalizeTier(item.tier) : (liveTiers()[0]?.id || ''));
     set('listLabel', item?.label || '');
     set('listDescription', item?.description || '');
     set('listPrice', item?.price ?? '');
@@ -926,6 +1157,126 @@ function fillListingForm(item) {
     toggleListingFields();
 }
 
+function shopSubtitle(cat) {
+    if (cat.gated === 'gang') return 'Only players with the configured Discord gang role can see this tab.';
+    if (cat.timed) return 'Timed stock. When the window closes, the listing disappears.';
+    if (cat.grantType === 'vehicle') return 'Spawn name in Admin. Stored in JG garages after purchase.';
+    if (cat.grantType === 'weapon') return 'Every weapon is granted through ox_inventory. Images come from ox_inventory/web/images.';
+    if (cat.grantType === 'bundle') return 'One purchase grants every ox_inventory item in the package.';
+    if (cat.grantType === 'item') return 'Type the ox_inventory item name in Admin. Images use Fivemanage, then ox_inventory.';
+    return 'Admins add listings from the Admin tab.';
+}
+
+function copyText(value) {
+    const text = String(value || '');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard.')).catch(() => fallbackCopy(text));
+        return;
+    }
+    fallbackCopy(text);
+}
+
+function fallbackCopy(text) {
+    const input = document.createElement('textarea');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    try { document.execCommand('copy'); toast('Copied to clipboard.'); } catch (err) { toast(text); }
+    input.remove();
+}
+
+function listingTebexCommand(itemId) {
+    const cmd = (state.tebex?.commands || []).find((row) => row.id === 'package_instant')?.command || 'givepackage {id} LISTING_ID';
+    return cmd.replace('LISTING_ID', itemId);
+}
+
+function renderTebexHelp() {
+    const tebex = state.tebex || state.admin?.tebex || {};
+    const commands = tebex.commands || [];
+    return `
+        <h3 style="margin:18px 0 8px">Tebex game commands</h3>
+        <p class="quick-hint">Paste these into the Tebex package <strong>Game Server Commands</strong> box. {transaction} is the Payment ID. {id} is the player’s server ID when the Tebex FiveM plugin has them linked. Players can also /${escapeHtml(tebex.playerRedeem || 'redeem')} tbx-xxxxxxxx in-game.</p>
+        ${tebex.storeUrl ? `<p class="sub">Store: ${escapeHtml(tebex.storeUrl)}</p>` : ''}
+        <div class="tebex-list">
+            ${commands.map((row) => `
+                <div class="tebex-row">
+                    <div>
+                        <div class="sub">${escapeHtml(row.title)}</div>
+                        <code>${escapeHtml(row.command)}</code>
+                    </div>
+                    <button class="btn ghost" data-copy="${escapeHtml(row.command)}">Copy</button>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderShopManager() {
+    const cats = adminCategories();
+    const tiers = adminTiers();
+    return `
+        <h3 style="margin:0 0 8px">Shop tabs</h3>
+        <p class="quick-hint">Add or hide shop categories here. Custom tabs can be deleted if they have no listings. Built-in tabs are hidden instead of deleted.</p>
+        <div class="form-grid listing-grid">
+            <div class="field"><label>Tab name</label><input id="tabLabel" placeholder="Imports" /></div>
+            <div class="field">
+                <label>Sells</label>
+                <select id="tabGrant">
+                    <option value="vehicle">Vehicles</option>
+                    <option value="weapon">Weapons</option>
+                    <option value="item" selected>Items</option>
+                    <option value="bundle">Bundles</option>
+                    <option value="mixed">Vehicles or items</option>
+                </select>
+            </div>
+            <div class="field"><label class="check-label"><input id="tabTiers" type="checkbox" /> Use vehicle tiers</label></div>
+            <div class="field"><label class="check-label"><input id="tabGang" type="checkbox" /> Gang role only</label></div>
+        </div>
+        <div class="actions" style="margin:10px 0 12px"><button class="btn primary" id="saveTab">Add tab</button></div>
+        <table class="table">
+            <thead><tr><th>Tab</th><th>Sells</th><th>Visible</th><th></th></tr></thead>
+            <tbody>
+                ${cats.map((cat) => `
+                    <tr>
+                        <td>${escapeHtml(cat.label)}<div class="sub">${escapeHtml(cat.id)}${cat.builtin ? ' • built-in' : ''}${cat.gated === 'gang' ? ' • gang' : ''}${cat.usesTiers ? ' • tiers' : ''}</div></td>
+                        <td>${escapeHtml(cat.grantType)}</td>
+                        <td>${cat.enabled === false ? 'Hidden' : 'Yes'}</td>
+                        <td class="actions">
+                            <button class="btn ghost" data-move-tab="${escapeHtml(cat.id)}" data-dir="-1">Up</button>
+                            <button class="btn ghost" data-move-tab="${escapeHtml(cat.id)}" data-dir="1">Down</button>
+                            ${cat.enabled === false
+                                ? `<button class="btn ghost" data-show-tab="${escapeHtml(cat.id)}">Show</button>`
+                                : `<button class="btn ghost" data-hide-tab="${escapeHtml(cat.id)}">${cat.builtin ? 'Hide' : 'Remove'}</button>`}
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        <h3 style="margin:18px 0 8px">Vehicle tiers</h3>
+        <p class="quick-hint">These pills show on any tab that uses vehicle tiers. Removing a tier moves its cars to another tier.</p>
+        <div class="form-grid listing-grid">
+            <div class="field"><label>Tier name</label><input id="tierLabel" placeholder="Ruby" /></div>
+        </div>
+        <div class="actions" style="margin:10px 0 12px"><button class="btn primary" id="saveTier">Add tier</button></div>
+        <table class="table">
+            <thead><tr><th>Tier</th><th></th></tr></thead>
+            <tbody>
+                ${tiers.map((tier) => `
+                    <tr>
+                        <td>${escapeHtml(tier.label)}<div class="sub">${escapeHtml(tier.id)}</div></td>
+                        <td class="actions">
+                            <button class="btn ghost" data-move-tier="${escapeHtml(tier.id)}" data-dir="-1">Up</button>
+                            <button class="btn ghost" data-move-tier="${escapeHtml(tier.id)}" data-dir="1">Down</button>
+                            <button class="btn ghost" data-delete-tier="${escapeHtml(tier.id)}">Remove</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        ${renderTebexHelp()}
+    `;
+}
+
 function renderAdmin() {
     const players = state.admin?.players || [];
     const logs = state.admin?.logs || [];
@@ -941,52 +1292,45 @@ function renderAdmin() {
                 </div>
                 <button class="btn ghost" id="adminRefresh">Refresh</button>
             </div>
+            ${renderShopManager()}
             <h3 id="listingFormTitle">Add shop listing</h3>
             <p class="quick-hint" id="listHint">Vehicles need a spawn name (sultan). Weapons and items need the ox_inventory name. Display name is filled in for you if you leave it blank.</p>
             <input type="hidden" id="listEditingId" />
             <div class="form-grid listing-grid">
-                <div class="field" data-for="all">
+                <div class="field" data-need="all">
                     <label>Type</label>
                     <select id="listCategory">
-                        <option value="vehicles">Vehicle</option>
-                        <option value="weapons">Weapon</option>
-                        <option value="extras" selected>Item</option>
-                        <option value="bundles">Bundle</option>
-                        <option value="gangs">Gang store</option>
-                        <option value="exclusives">City exclusive</option>
-                        <option value="limited">Limited time</option>
+                        ${adminCategories().map((cat) => `<option value="${escapeHtml(cat.id)}" ${cat.id === 'extras' ? 'selected' : ''}>${escapeHtml(cat.label)}</option>`).join('')}
                     </select>
                 </div>
-                <div class="field" data-for="vehicles">
+                <div class="field" data-need="tier">
                     <label>Vehicle tier</label>
                     <select id="listTier">
-                        <option value="emerald">Emerald</option>
-                        <option value="sapphire">Sapphire</option>
-                        <option value="blackdiamond">Black Diamond</option>
+                        ${liveTiers().map((tier) => `<option value="${escapeHtml(tier.id)}">${escapeHtml(tier.label)}</option>`).join('')}
                     </select>
                 </div>
-                <div class="field" data-for="vehicles exclusives limited gangs">
+                <div class="field" data-need="model">
                     <label>Vehicle spawn name</label>
                     <input id="listModel" placeholder="sultan" />
                 </div>
-                <div class="field" data-for="weapons extras exclusives limited gangs">
+                <div class="field" data-need="item">
                     <label>ox_inventory item</label>
                     <input id="listItemName" placeholder="WEAPON_PISTOL or armour" />
                     <div class="ox-preview hidden-field" id="oxPreview"></div>
                 </div>
-                <div class="field" data-for="all">
+                <div class="field" data-need="all">
                     <label>Price (${state.currency.short || 'Gems'})</label>
                     <input id="listPrice" type="number" min="0" placeholder="250" />
                 </div>
-                <div class="field" data-for="all">
+                <div class="field" data-need="all">
                     <label>Display name <span class="muted-inline">(optional)</span></label>
                     <input id="listLabel" placeholder="Auto from spawn / ox item" />
                 </div>
-                <div class="field" data-for="extras exclusives limited gangs">
+                <div class="field" data-need="count">
                     <label>Item count</label>
                     <input id="listCount" type="number" min="1" value="1" />
                 </div>
-                <div class="field full" data-for="bundles">
+                <div class="field full" data-need="bundle">
                     <label>Bundle items (ox_inventory name + count)</label>
                     <div class="bundle-head"><span>Item name</span><span>Qty</span><span></span></div>
                     <div id="bundleRows" class="bundle-rows">
@@ -1007,11 +1351,11 @@ function renderAdmin() {
                             <img id="listImagePreview" class="listing-preview hidden-field" alt="" />
                         </div>
                     </div>
-                    <div class="field" data-for="vehicles exclusives limited gangs">
+                    <div class="field" data-need="garage">
                         <label>JG garage name</label>
                         <input id="listGarageId" placeholder="legion" />
                     </div>
-                    <div class="field" data-for="vehicles exclusives limited gangs">
+                    <div class="field" data-need="garage">
                         <label>Garage type</label>
                         <select id="listGarageType">
                             <option value="car">Car</option>
@@ -1019,11 +1363,11 @@ function renderAdmin() {
                             <option value="boat">Boat</option>
                         </select>
                     </div>
-                    <div class="field" data-for="weapons gangs">
+                    <div class="field" data-need="ammo">
                         <label>Ammo</label>
                         <input id="listAmmo" type="number" min="0" placeholder="60" />
                     </div>
-                    <div class="field hidden-field" data-for="limited exclusives">
+                    <div class="field hidden-field" data-need="timed">
                         <label>Pet ped model</label>
                         <input id="listPetModel" placeholder="a_c_husky" />
                     </div>
@@ -1035,11 +1379,11 @@ function renderAdmin() {
                         <label>Stock (blank = unlimited)</label>
                         <input id="listStock" type="number" min="0" placeholder="" />
                     </div>
-                    <div class="field" data-for="limited">
+                    <div class="field" data-need="timed">
                         <label>Limited from (UTC)</label>
                         <input id="listLimitedFrom" placeholder="2026-08-01T00:00:00Z" />
                     </div>
-                    <div class="field" data-for="limited">
+                    <div class="field" data-need="timed">
                         <label>Limited until (UTC)</label>
                         <input id="listLimitedUntil" placeholder="2026-09-15T23:59:59Z" />
                     </div>
@@ -1068,6 +1412,7 @@ function renderAdmin() {
                             <td>${escapeHtml(listingContents(row))}</td>
                             <td>${formatCoins(row.price)}</td>
                             <td class="actions">
+                                <button class="btn ghost" data-copy="${escapeHtml(listingTebexCommand(row.id))}">Tebex</button>
                                 <button class="btn ghost" data-edit-listing="${escapeHtml(row.id)}">Edit</button>
                                 <button class="btn ghost" data-delete-listing="${escapeHtml(row.id)}">Delete</button>
                             </td>
@@ -1143,19 +1488,20 @@ function renderAdmin() {
 
 function renderContent() {
     const root = document.getElementById('content');
-    const views = {
-        dashboard: renderDashboard,
-        vehicles: renderVehicles,
-        weapons: renderWeapons,
-        extras: () => renderSimpleShop('extras', 'Extra Items', 'Type the ox_inventory item name in Admin. Images use Fivemanage, then ox_inventory.'),
-        bundles: () => renderSimpleShop('bundles', 'Bundles', 'One purchase grants every ox_inventory item in the package.'),
-        gangs: () => renderSimpleShop('gangs', state.gangTabLabel || 'Gang Store', 'Only players with the configured Discord gang role can see this tab.'),
-        exclusives: () => renderSimpleShop('exclusives', 'City Exclusives', 'One-per-character Envy drops that never hit public dealers.'),
-        limited: () => renderSimpleShop('limited', 'Limited Time', 'Timed stock. When the window closes, the listing disappears.'),
-        inventory: renderInventory,
-        admin: renderAdmin,
-    };
-    root.innerHTML = (views[state.tab] || views.dashboard)();
+    if (state.tab === 'dashboard') root.innerHTML = renderDashboard();
+    else if (state.tab === 'inventory') root.innerHTML = renderInventory();
+    else if (state.tab === 'admin') root.innerHTML = renderAdmin();
+    else {
+        const cat = shopCategory(state.tab);
+        if (!cat?.id || !liveCategories().some((row) => row.id === state.tab)) {
+            state.tab = 'dashboard';
+            root.innerHTML = renderDashboard();
+        } else if (cat.usesTiers) {
+            root.innerHTML = renderTierShop(cat.id, cat.label, shopSubtitle(cat));
+        } else {
+            root.innerHTML = renderSimpleShop(cat.id, cat.label, shopSubtitle(cat));
+        }
+    }
 
     const search = root.querySelector('#search');
     if (search) {
@@ -1173,8 +1519,7 @@ function renderContent() {
 
     root.querySelectorAll('#tierPills .pill').forEach((btn) => {
         btn.addEventListener('click', () => {
-            if (state.tab === 'vehicles') state.vehicleTier = btn.dataset.tier;
-            if (state.tab === 'weapons') state.weaponTier = btn.dataset.tier;
+            state.shopTier = btn.dataset.tier;
             render();
         });
     });
@@ -1279,6 +1624,59 @@ function renderContent() {
             btn.addEventListener('click', async () => {
                 handleResult(await post('adminDeleteListing', { itemId: btn.dataset.deleteListing }), 'Shop listing removed.');
             });
+        });
+        const saveTab = root.querySelector('#saveTab');
+        if (saveTab) {
+            const tabGrant = root.querySelector('#tabGrant');
+            const tabTiers = root.querySelector('#tabTiers');
+            if (tabGrant && tabTiers) {
+                tabGrant.addEventListener('change', () => {
+                    if (tabGrant.value === 'vehicle') tabTiers.checked = true;
+                });
+            }
+            saveTab.addEventListener('click', async () => {
+                handleResult(await post('adminSaveCategory', {
+                    label: document.getElementById('tabLabel')?.value,
+                    grantType: document.getElementById('tabGrant')?.value,
+                    usesTiers: Boolean(document.getElementById('tabTiers')?.checked) || document.getElementById('tabGrant')?.value === 'vehicle',
+                    gated: document.getElementById('tabGang')?.checked ? 'gang' : 'none',
+                }), 'Shop tab saved.');
+            });
+        }
+        const saveTier = root.querySelector('#saveTier');
+        if (saveTier) {
+            saveTier.addEventListener('click', async () => {
+                handleResult(await post('adminSaveTier', { label: document.getElementById('tierLabel')?.value }), 'Vehicle tier saved.');
+            });
+        }
+        root.querySelectorAll('[data-hide-tab]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                handleResult(await post('adminDeleteCategory', { id: btn.dataset.hideTab }));
+            });
+        });
+        root.querySelectorAll('[data-show-tab]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const cat = adminCategories().find((row) => row.id === btn.dataset.showTab);
+                handleResult(await post('adminSaveCategory', { ...cat, id: cat?.id, label: cat?.label, enabled: true }), 'Shop tab saved.');
+            });
+        });
+        root.querySelectorAll('[data-move-tab]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                handleResult(await post('adminMoveCategory', { id: btn.dataset.moveTab, direction: Number(btn.dataset.dir) }));
+            });
+        });
+        root.querySelectorAll('[data-delete-tier]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                handleResult(await post('adminDeleteTier', { id: btn.dataset.deleteTier }));
+            });
+        });
+        root.querySelectorAll('[data-move-tier]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                handleResult(await post('adminMoveTier', { id: btn.dataset.moveTier, direction: Number(btn.dataset.dir) }));
+            });
+        });
+        root.querySelectorAll('[data-copy]').forEach((btn) => {
+            btn.addEventListener('click', () => copyText(btn.dataset.copy));
         });
     }
 }

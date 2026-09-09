@@ -43,6 +43,9 @@ function Images.IsWeapon(itemOrKey)
     if itemOrKey.category == 'weapons' or itemOrKey.weapon then
         return true
     end
+    if itemOrKey.category and Shop and Shop.GrantType and Shop.GrantType(itemOrKey.category) == 'weapon' then
+        return true
+    end
     local name = itemOrKey.item or itemOrKey.imageKey or ''
     return type(name) == 'string' and name:upper():find('^WEAPON_') ~= nil
 end

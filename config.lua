@@ -112,23 +112,30 @@ Config.AllowSelfGift = false
 Config.UniqueItemsOnce = true
 
 --[[
-    Tebex
+    Tebex — paste these into the package "Game Server Commands" box.
 
-    Players buy Gems on your Tebex store, then redeem the Payment ID (tbx-xxxxxxxx)
-    in the shop Redeem box.
-
-    Package command (500 Gems example):
+    Players buy Gems, then redeem the Payment ID in F11 → Redeem (or /redeem):
         tbxgems {transaction} 500
 
-    Optional instant grant if Tebex is linked to the player:
-        gemgrant {id} 500 Tebex VIP
-        gempackage {id} veh_sultan
+    Instant grant when the Tebex FiveM plugin has the player linked ({id} = server id):
+        givegems {id} 500
+        givepackage {id} veh_sultan
+
+    Package that the player redeems later (no Gems, just the listing):
+        tbxpackage {transaction} veh_sultan
+
+    gemgrant / gempackage still work as aliases.
 ]]
 Config.Tebex = {
     MaxGrant = 250000,
     GrantCommand = 'gemgrant',
     PackageCommand = 'gempackage',
     RedeemCommand = 'tbxgems',
+    GiveGemsCommand = 'givegems',
+    GivePackageCommand = 'givepackage',
+    PackageRedeemCommand = 'tbxpackage',
+    PlayerRedeemCommand = 'redeem',
+    StoreUrl = '', -- e.g. https://envyroleplay.tebex.io
 }
 
 --[[

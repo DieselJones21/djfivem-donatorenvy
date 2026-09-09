@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS `dj_envydonator_listings` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `item_id` VARCHAR(64) NOT NULL,
     `category` VARCHAR(32) NOT NULL,
-    `tier` VARCHAR(16) DEFAULT NULL,
+    `tier` VARCHAR(40) DEFAULT NULL,
     `label` VARCHAR(128) NOT NULL,
     `description` TEXT,
     `price` INT NOT NULL DEFAULT 0,

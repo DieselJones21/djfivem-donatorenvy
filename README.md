@@ -1,18 +1,20 @@
 # Envy Roleplay Donator (`djfivem-donatorenvy`)
 
-FiveM donator store for **Envy Roleplay**, based on `djfivem-305donator`, with **Gems**, a neon cyan / chrome shop UI, Tebex Payment ID redeem, oxmysql persistence, and an optional Discord gang tab.
+FiveM donator store for **Envy Roleplay**, based on `djfivem-305donator`, with **Gems**, a neon cyan / chrome shop UI, Tebex game commands, custom shop tabs, custom vehicle tiers, oxmysql persistence, and an optional Discord gang tab.
 
 Open with **F11** or `/donator`.
 
 ## Features
 
-- **Quick shop editor** — pick Vehicle / Weapon / Item, type the spawn or ox name and a Gems price, then Save. Display name fills in for you.
+- **Quick shop editor** — pick a tab, type the spawn or ox name and a Gems price, then Save. Display name fills in for you.
+- **Custom shop tabs** — add, hide, reorder, or remove categories in-game from Admin → Shop tabs
+- **Custom vehicle tiers** — add or remove tiers (Ruby, Staff, etc.) in-game. Vehicle tabs show those pills
 - **Empty catalog by default** — no built-in items; you add your own
-- **Vehicles** — Emerald / Sapphire / Black Diamond tiers, stored in **JG Advanced Garages** after purchase
-- **Weapons** — one flat list (no tiers). Images always come from `ox_inventory/web/images`
+- **Vehicles** — stored in **JG Advanced Garages** after purchase
+- **Weapons** — one flat list (no weapon tiers). Images always come from `ox_inventory/web/images`
 - **Items & bundles** — granted through **ox_inventory**. Images use **Fivemanage**, then fall back to ox_inventory
 - **Confirmed delivery** — weapons and items go into inventory immediately; vehicles go into the garage. Pending grants flush on next join
-- **Gems** — Tebex Payment IDs (`tbx-xxxxxxxx`) redeem in the shop. Staff can still grant Gems from Admin
+- **Gems** — Tebex Payment IDs (`tbx-xxxxxxxx`) redeem in the shop or with `/redeem`. Staff can still grant Gems from Admin
 - **Gang Store tab** — only players with a configured Discord role can see it (admins always can)
 - **City exclusives & limited time** — unique and timed listings
 - **Gifting, refunds, inventory, Discord webhooks**
@@ -129,12 +131,23 @@ Admins are anyone with ACE `donator.admin`, ESX groups `admin` / `superadmin`, o
 | `/setcoins [id] [amount]` | Set an exact balance |
 | `/checkcoins [id]` | Inspect a player (or yourself) |
 | `/givecoinsid [identifier] [amount] [reason]` | Grant Gems to an offline identifier |
-| `/gemgrant [id or identifier] [amount] [reason]` | Console / Tebex instant Gem grant |
-| `/gempackage [id or identifier] [itemId]` | Console / Tebex catalog grant (no Gem charge) |
+| `/givegems [id or identifier] [amount]` | Console / Tebex instant Gem grant |
+| `/givepackage [id or identifier] [itemId]` | Console / Tebex catalog grant (no Gem charge) |
 | `/tbxgems [tbx-id] [gems] [itemId]` | Register a Tebex Payment ID for in-shop redeem |
+| `/tbxpackage [tbx-id] [itemId]` | Register a Tebex Payment ID that grants a listing |
+| `/redeem [tbx-id]` | Player command to redeem a Payment ID |
+| `/tebexcmds` | Print the Tebex command list to the server console |
+| `/gemgrant` / `/gempackage` | Aliases of givegems / givepackage |
 | `/coins` | Show your own Gems |
 
-The **Admin** tab is where you add shop items, grant Gems, create codes, inspect history, and refund purchases.
+The **Admin** tab is where you add shop tabs, vehicle tiers, listings, grant Gems, create codes, inspect history, and refund purchases.
+
+### Shop tabs and vehicle tiers
+
+1. Open **F11** as an admin → **Admin**.
+2. **Shop tabs** — type a name (Imports), pick what it sells (Vehicles / Weapons / Items / Bundles / mixed), optionally tick **Use vehicle tiers** or **Gang role only**, then **Add tab**.
+3. Hide a built-in tab with **Hide**. Remove a custom tab with **Remove** (listings in that tab must be deleted or moved first).
+4. **Vehicle tiers** — type a name (Ruby) and **Add tier**. Those pills show on every tab that uses vehicle tiers. Removing a tier moves its vehicles to another tier.
 
 ### Add a listing (quick)
 
@@ -151,7 +164,7 @@ The **Admin** tab is where you add shop items, grant Gems, create codes, inspect
 
 Weapons and extras grant the ox_inventory item immediately. Vehicles go into JG Advanced Garages. If the player is offline, the grant is marked pending and delivered when they next join.
 
-Tabs: Dashboard → Vehicles → Weapons → Extra Items → Bundles → Gang Store (role only) → City Exclusives → Limited Time → Inventory → Admin.
+Tabs: Dashboard → your shop tabs (Vehicles, Weapons, Extra Items, Bundles, Gang Store, City Exclusives, Limited Time, plus any you add) → Inventory → Admin.
 
 The default shop is empty on purpose so you only sell what you add.
 
@@ -179,43 +192,44 @@ exports['djfivem-donatorenvy']:GrantItemIdentifier('license:abc123', 'veh_sultan
 
 Amounts are server-validated (positive integers, capped by `Config.Tebex.MaxGrant`).
 
-## Tebex — buy Gems, redeem the tbx- ID
+## Tebex — link the shop to your store
 
-Players buy a Gems package on Tebex, then paste the **Payment ID** from their receipt (`tbx-xxxxxxxx`) into **Redeem** in the shop.
+Put **Game Server Commands** on each Tebex package. The Admin tab also lists these with a Copy button. Console command `/tebexcmds` prints the same list.
 
-### 1. Create a Tebex package (example: 500 Gems)
+Set `Config.Tebex.StoreUrl` if you want the store URL shown in Admin.
 
-In the Tebex package **Game Server Commands**, add a console command:
+### Commands to paste in Tebex
 
-```
-tbxgems {transaction} 500
-```
-
-| Package | Command |
+| What the package should do | Game Server Command |
 |---|---|
-| 500 Gems | `tbxgems {transaction} 500` |
-| 2500 Gems | `tbxgems {transaction} 2500` |
-| 500 Gems + a car | `tbxgems {transaction} 500 veh_sultan` |
+| 500 Gems, player redeems the Payment ID in-game | `tbxgems {transaction} 500` |
+| 2500 Gems, same redeem flow | `tbxgems {transaction} 2500` |
+| Gems + a listing they redeem later | `tbxgems {transaction} 500 veh_sultan` |
+| Only a listing they redeem later | `tbxpackage {transaction} veh_sultan` |
+| Instant Gems if the Tebex FiveM plugin has them linked | `givegems {id} 500` |
+| Instant listing if linked | `givepackage {id} veh_sultan` |
 
-`{transaction}` is the Tebex Payment ID. The script stores it as a one-time redeem code. If Tebex retries the command, a duplicate ID is ignored.
+`{transaction}` is the Tebex Payment ID (`tbx-xxxxxxxx`). `{id}` is the player’s FiveM server ID when they are linked through the official Tebex plugin.
 
-### 2. Player flow
+`tbxgems` / `tbxpackage` store a one-time code. If Tebex retries the command, a duplicate ID is ignored. Click **Tebex** on a listing row in Admin to copy `givepackage {id} <that listing>`.
+
+### Player flow (Payment ID)
 
 1. Player checks out on your Tebex store.
 2. Tebex emails / shows Payment ID `tbx-xxxxxxxx`.
-3. In-game they press **F11** → **REDEEM** → paste that ID.
-4. Gems are added. The same ID cannot be used twice.
+3. In-game they press **F11** → **REDEEM**, or type `/redeem tbx-xxxxxxxx`.
+4. Gems (and any attached listing) are added. The same ID cannot be used twice.
 
-### Optional: instant grant (Tebex FiveM plugin linked)
+### Instant grant (Tebex FiveM plugin linked)
 
-If the player is linked and online, you can skip redeem:
+If the player is linked and online, skip redeem:
 
 ```
-gemgrant {id} 2500 Tebex VIP
-gempackage {id} veh_sultan
+givegems {id} 2500
+givepackage {id} veh_sultan
 ```
 
-Offline Gem grants still apply to the identifier. Offline inventory items wait until they next join.
+`gemgrant` and `gempackage` still work as aliases. Offline Gem grants still apply to the identifier. Offline inventory items wait until they next join.
 
 ## Discord gang tab
 

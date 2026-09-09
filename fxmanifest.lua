@@ -4,13 +4,14 @@ lua54 'yes'
 
 name 'djfivem-donatorenvy'
 author 'DieselJones21'
-description 'Envy Roleplay donator store with Gems, Tebex TBX redeem, Discord gang tab, ox_inventory, and JG garages'
-version '1.8.0'
+description 'Envy Roleplay donator store with Gems, Tebex commands, custom tabs, vehicle tiers, ox_inventory, and JG garages'
+version '1.9.0'
 
 shared_scripts {
     'config.lua',
     'shared/locale.lua',
     'shared/images.lua',
+    'shared/shop.lua',
     'shared/tiers.lua',
     'shared/catalog.lua',
 }
