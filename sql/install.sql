@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `dj_envydonator_owned` (
     `identifier` VARCHAR(64) NOT NULL,
     `item_id` VARCHAR(64) NOT NULL,
     `category` VARCHAR(32) NOT NULL,
-    `tier` VARCHAR(16) DEFAULT NULL,
+    `tier` VARCHAR(40) DEFAULT NULL,
     `label` VARCHAR(128) NOT NULL,
     `data` LONGTEXT,
     `active` TINYINT(1) NOT NULL DEFAULT 1,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS `dj_envydonator_purchases` (
     `item_id` VARCHAR(64) NOT NULL,
     `label` VARCHAR(128) NOT NULL,
     `category` VARCHAR(32) NOT NULL,
-    `tier` VARCHAR(16) DEFAULT NULL,
+    `tier` VARCHAR(40) DEFAULT NULL,
     `price` INT NOT NULL,
     `quantity` INT NOT NULL DEFAULT 1,
     `gifted_to` VARCHAR(64) DEFAULT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS `dj_envydonator_listings` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `item_id` VARCHAR(64) NOT NULL,
     `category` VARCHAR(32) NOT NULL,
-    `tier` VARCHAR(16) DEFAULT NULL,
+    `tier` VARCHAR(40) DEFAULT NULL,
     `label` VARCHAR(128) NOT NULL,
     `description` TEXT,
     `price` INT NOT NULL DEFAULT 0,
@@ -103,4 +103,14 @@ CREATE TABLE IF NOT EXISTS `dj_envydonator_listings` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `item_id` (`item_id`),
     KEY `category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `dj_envydonator_shop_meta` (
+    `kind` VARCHAR(16) NOT NULL,
+    `meta_id` VARCHAR(40) NOT NULL,
+    `label` VARCHAR(80) NOT NULL,
+    `sort_order` INT NOT NULL DEFAULT 0,
+    `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+    `data` LONGTEXT,
+    PRIMARY KEY (`kind`, `meta_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

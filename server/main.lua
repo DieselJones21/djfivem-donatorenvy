@@ -83,43 +83,39 @@ end
 
 local function publicCatalog(includeGangs)
     local out = {
-        vehicles = EmptyTierBuckets(),
-        weapons = {},
-        extras = {},
-        bundles = {},
         pets = {},
-        exclusives = {},
-        limited = {},
-        gangs = {},
     }
-
-    for tier, list in pairs(Catalog.vehicles) do
-        for i = 1, #list do
-            local item = list[i]
-            item.category = 'vehicles'
-            item.tier = NormalizeTier(tier)
-            out.vehicles[item.tier] = out.vehicles[item.tier] or {}
-            out.vehicles[item.tier][#out.vehicles[item.tier] + 1] = publicItem(item)
+    local categories = Shop.AllCategories and Shop.AllCategories() or {}
+    for i = 1, #categories do
+        local cat = categories[i]
+        if cat.usesTiers then
+            out[cat.id] = EmptyTierBuckets()
+        else
+            out[cat.id] = {}
         end
-    end
-
-    local function fill(src, dest, category)
-        if type(src) ~= 'table' then
-            return
+        if cat.enabled and (cat.gated ~= 'gang' or includeGangs) then
+            local src = Catalog[cat.id]
+            if cat.usesTiers then
+                if type(src) == 'table' then
+                    for tier, list in pairs(src) do
+                        if type(list) == 'table' then
+                            out[cat.id][tier] = out[cat.id][tier] or {}
+                            for n = 1, #list do
+                                list[n].category = cat.id
+                                list[n].tier = NormalizeTier(list[n].tier or tier)
+                                out[cat.id][list[n].tier] = out[cat.id][list[n].tier] or {}
+                                out[cat.id][list[n].tier][#out[cat.id][list[n].tier] + 1] = publicItem(list[n])
+                            end
+                        end
+                    end
+                end
+            else
+                for n = 1, #(src or {}) do
+                    src[n].category = cat.id
+                    out[cat.id][#out[cat.id] + 1] = publicItem(src[n])
+                end
+            end
         end
-        for i = 1, #src do
-            src[i].category = category
-            dest[#dest + 1] = publicItem(src[i])
-        end
-    end
-
-    fill(Catalog.weapons, out.weapons, 'weapons')
-    fill(Catalog.extras, out.extras, 'extras')
-    fill(Catalog.bundles, out.bundles, 'bundles')
-    fill(Catalog.exclusives, out.exclusives, 'exclusives')
-    fill(Catalog.limited, out.limited, 'limited')
-    if includeGangs then
-        fill(Catalog.gangs, out.gangs, 'gangs')
     end
     return out
 end
@@ -320,7 +316,7 @@ local function canBuy(identifier, item, source)
     if not item then
         return false, 'invalid'
     end
-    if item.category == 'gangs' and source and source ~= 0 then
+    if Shop.IsGang(item.category) and source and source ~= 0 then
         if not Discord or not Discord.HasGangAccess(source) then
             return false, 'no_permission'
         end
@@ -377,12 +373,41 @@ local function resolveTarget(payload)
     end
 end
 
+local function tebexHelp()
+    local cfg = Config.Tebex or {}
+    local redeem = cfg.RedeemCommand or 'tbxgems'
+    local giveGems = cfg.GiveGemsCommand or 'givegems'
+    local givePackage = cfg.GivePackageCommand or 'givepackage'
+    local tbxPackage = cfg.PackageRedeemCommand or 'tbxpackage'
+    return {
+        storeUrl = cfg.StoreUrl or '',
+        playerRedeem = cfg.PlayerRedeemCommand or 'redeem',
+        commands = {
+            { id = 'gems_redeem', title = 'Gems pack (player pastes tbx- ID)', command = redeem .. ' {transaction} 500' },
+            { id = 'gems_instant', title = 'Instant Gems (Tebex plugin linked)', command = giveGems .. ' {id} 500' },
+            { id = 'package_instant', title = 'Instant listing (Tebex plugin linked)', command = givePackage .. ' {id} LISTING_ID' },
+            { id = 'package_redeem', title = 'Listing the player redeems later', command = tbxPackage .. ' {transaction} LISTING_ID' },
+        },
+    }
+end
+
+local function shopLayout(isAdmin, isGangMember)
+    return {
+        categories = Shop.ClientCategories(false, isAdmin or isGangMember),
+        tiers = Shop.ClientTiers(),
+        tebex = tebexHelp(),
+    }
+end
+
 local function adminBundle()
     return {
         players = onlinePlayers(),
         logs = DB.GetLogs(40),
         codes = DB.ListCodes(),
         listings = Listings.EditorRows(),
+        categories = Shop.AdminCategories(),
+        tiers = Shop.AdminTiers(),
+        tebex = tebexHelp(),
     }
 end
 
@@ -405,6 +430,7 @@ RegisterDonatorCallback('open', function(source)
         giftPlayers[#giftPlayers + 1] = { id = everyone[i].id, name = everyone[i].name }
     end
     local isGangMember = Discord and Discord.HasGangAccess(source) or false
+    local layout = shopLayout(snap.isAdmin, isGangMember)
     return {
         ok = true,
         player = snap,
@@ -417,9 +443,14 @@ RegisterDonatorCallback('open', function(source)
         keybind = Config.Keybind,
         theme = Config.Theme or 'envy',
         isGangMember = isGangMember,
-        gangTabLabel = Discord and Discord.TabLabel() or 'Gang Store',
+        gangTabLabel = (Shop.GetCategory('gangs') and Shop.GetCategory('gangs').label)
+            or (Discord and Discord.TabLabel())
+            or 'Gang Store',
         discordLinked = Discord and Discord.GetDiscordId(source) ~= nil or false,
         discordReady = Discord and Discord.Configured() or false,
+        categories = layout.categories,
+        tiers = layout.tiers,
+        tebex = layout.tebex,
     }
 end)
 
@@ -556,7 +587,8 @@ RegisterDonatorCallback('gift', function(source, payload)
     end)
 end)
 
-RegisterDonatorCallback('redeem', function(source, payload)
+local function performRedeem(source, payload)
+    payload = payload or {}
     if isOnCooldown(source) then
         return { ok = false, error = 'cooldown', message = Locale.cooldown }
     end
@@ -617,7 +649,9 @@ RegisterDonatorCallback('redeem', function(source, payload)
     end
     Framework.Notify(source, msg, 'success')
     return { ok = true, player = playerSnapshot(source), message = msg }
-end)
+end
+
+RegisterDonatorCallback('redeem', performRedeem)
 
 RegisterDonatorCallback('spawnPet', function(source, payload)
     local identifier = Framework.GetIdentifier(source)
@@ -826,6 +860,8 @@ RegisterDonatorCallback('adminSaveListing', function(source, payload)
         catalog = publicCatalog(true),
         admin = adminBundle(),
         player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
     }
 end)
 
@@ -876,6 +912,128 @@ RegisterDonatorCallback('adminDeleteListing', function(source, payload)
         catalog = publicCatalog(true),
         admin = adminBundle(),
         player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
+    }
+end)
+
+RegisterDonatorCallback('adminSaveCategory', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission', message = Locale.no_permission }
+    end
+    local cat, err = Listings.SaveCategory(payload)
+    if not cat then
+        return { ok = false, error = err, message = Locale[err] or Locale.listing_invalid }
+    end
+    local actorId, actorName = Framework.GetIdentifier(source)
+    DB.InsertLog(actorId, actorName, nil, nil, 'save_tab', { id = cat.id, label = cat.label })
+    return {
+        ok = true,
+        message = Locale.tab_saved,
+        catalog = publicCatalog(true),
+        admin = adminBundle(),
+        player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
+    }
+end)
+
+RegisterDonatorCallback('adminDeleteCategory', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission', message = Locale.no_permission }
+    end
+    local cat, err, hidden = Listings.DeleteCategory(payload and payload.id)
+    if not cat then
+        return { ok = false, error = err, message = Locale[err] or Locale.listing_invalid }
+    end
+    local actorId, actorName = Framework.GetIdentifier(source)
+    DB.InsertLog(actorId, actorName, nil, nil, hidden == 'hidden' and 'hide_tab' or 'delete_tab', { id = payload.id })
+    return {
+        ok = true,
+        message = hidden == 'hidden' and Locale.tab_hidden or Locale.tab_removed,
+        catalog = publicCatalog(true),
+        admin = adminBundle(),
+        player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
+    }
+end)
+
+RegisterDonatorCallback('adminMoveCategory', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission', message = Locale.no_permission }
+    end
+    local cat, err = Listings.MoveCategory(payload and payload.id, payload and payload.direction)
+    if not cat then
+        return { ok = false, error = err, message = Locale[err] or Locale.listing_invalid }
+    end
+    return {
+        ok = true,
+        catalog = publicCatalog(true),
+        admin = adminBundle(),
+        player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
+    }
+end)
+
+RegisterDonatorCallback('adminSaveTier', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission', message = Locale.no_permission }
+    end
+    local tier, err = Listings.SaveTier(payload)
+    if not tier then
+        return { ok = false, error = err, message = Locale[err] or Locale.listing_invalid }
+    end
+    local actorId, actorName = Framework.GetIdentifier(source)
+    DB.InsertLog(actorId, actorName, nil, nil, 'save_tier', { id = tier.id, label = tier.label })
+    return {
+        ok = true,
+        message = Locale.tier_saved,
+        catalog = publicCatalog(true),
+        admin = adminBundle(),
+        player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
+    }
+end)
+
+RegisterDonatorCallback('adminDeleteTier', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission', message = Locale.no_permission }
+    end
+    local ok, err = Listings.DeleteTier(payload and payload.id)
+    if not ok then
+        return { ok = false, error = err, message = Locale[err] or Locale.listing_invalid }
+    end
+    local actorId, actorName = Framework.GetIdentifier(source)
+    DB.InsertLog(actorId, actorName, nil, nil, 'delete_tier', { id = payload.id, movedTo = err })
+    return {
+        ok = true,
+        message = Locale.tier_removed,
+        catalog = publicCatalog(true),
+        admin = adminBundle(),
+        player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
+    }
+end)
+
+RegisterDonatorCallback('adminMoveTier', function(source, payload)
+    if not Framework.IsAdmin(source) then
+        return { ok = false, error = 'no_permission', message = Locale.no_permission }
+    end
+    local tier, err = Listings.MoveTier(payload and payload.id, payload and payload.direction)
+    if not tier then
+        return { ok = false, error = err, message = Locale[err] or Locale.listing_invalid }
+    end
+    return {
+        ok = true,
+        catalog = publicCatalog(true),
+        admin = adminBundle(),
+        player = playerSnapshot(source),
+        categories = Shop.ClientCategories(false, true),
+        tiers = Shop.ClientTiers(),
     }
 end)
 
@@ -1072,6 +1230,44 @@ end
 RegisterCommand((Config.Tebex and Config.Tebex.GrantCommand) or 'gemgrant', tebexGrantCoins, true)
 RegisterCommand((Config.Tebex and Config.Tebex.PackageCommand) or 'gempackage', tebexGrantPackage, true)
 RegisterCommand((Config.Tebex and Config.Tebex.RedeemCommand) or 'tbxgems', tebexRegisterCode, true)
+RegisterCommand((Config.Tebex and Config.Tebex.GiveGemsCommand) or 'givegems', tebexGrantCoins, true)
+RegisterCommand((Config.Tebex and Config.Tebex.GivePackageCommand) or 'givepackage', tebexGrantPackage, true)
+RegisterCommand((Config.Tebex and Config.Tebex.PackageRedeemCommand) or 'tbxpackage', function(src, args)
+    tebexRegisterCode(src, { args[1], 0, args[2] })
+end, true)
+
+RegisterCommand('tebexcmds', function(src)
+    if not ensureAdmin(src) then return end
+    local help = tebexHelp()
+    print('--- Envy Donator Tebex commands ---')
+    print('Put these in the Tebex package Game Server Commands box:')
+    for i = 1, #help.commands do
+        print(('  %s'):format(help.commands[i].command))
+        print(('    %s'):format(help.commands[i].title))
+    end
+    print(('Player redeem in-game: /%s tbx-xxxxxxxx  or F11 → Redeem'):format(help.playerRedeem))
+    if help.storeUrl ~= '' then
+        print('Store URL: ' .. help.storeUrl)
+    end
+    if src ~= 0 then
+        Framework.Notify(src, 'Tebex command list printed to the server console.', 'inform')
+    end
+end, true)
+
+RegisterCommand((Config.Tebex and Config.Tebex.PlayerRedeemCommand) or 'redeem', function(src, args)
+    if src == 0 then
+        print('[djfivem-donatorenvy] Players use /redeem tbx-xxxxxxxx in-game.')
+        return
+    end
+    if not args[1] then
+        Framework.Notify(src, Locale.redeem_hint, 'inform')
+        return
+    end
+    local result = performRedeem(src, { code = args[1] })
+    if result and not result.ok then
+        Framework.Notify(src, result.message or Locale.invalid_code, 'error')
+    end
+end, false)
 
 AddEventHandler('playerDropped', function()
     cooldowns[source] = nil

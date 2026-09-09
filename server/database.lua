@@ -235,8 +235,89 @@ function DB.EnsureListingsTable()
     ]])
 end
 
+function DB.EnsureShopMetaTable()
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS `dj_envydonator_shop_meta` (
+            `kind` VARCHAR(16) NOT NULL,
+            `meta_id` VARCHAR(40) NOT NULL,
+            `label` VARCHAR(80) NOT NULL,
+            `sort_order` INT NOT NULL DEFAULT 0,
+            `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+            `data` LONGTEXT,
+            PRIMARY KEY (`kind`, `meta_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ]])
+end
+
+function DB.SeedShopMeta()
+    local function insert(kind, row)
+        MySQL.query.await(
+            'INSERT IGNORE INTO dj_envydonator_shop_meta (kind, meta_id, label, sort_order, enabled, data) VALUES (?, ?, ?, ?, ?, ?)',
+            {
+                kind,
+                row.id,
+                row.label,
+                row.sort or 0,
+                row.enabled == false and 0 or 1,
+                kind == 'category' and Shop.EncodeCategory(row) or Shop.EncodeTier(row),
+            }
+        )
+    end
+    for _, row in ipairs(Shop.DefaultCategories()) do
+        insert('category', row)
+    end
+    for _, row in ipairs(Shop.DefaultTiers()) do
+        insert('tier', row)
+    end
+end
+
+function DB.GetShopMeta(kind)
+    return MySQL.query.await(
+        'SELECT kind, meta_id, label, sort_order, enabled, data FROM dj_envydonator_shop_meta WHERE kind = ? ORDER BY sort_order ASC, meta_id ASC',
+        { kind }
+    ) or {}
+end
+
+function DB.UpsertShopMeta(kind, row)
+    MySQL.query.await([[
+        INSERT INTO dj_envydonator_shop_meta (kind, meta_id, label, sort_order, enabled, data)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            label = VALUES(label),
+            sort_order = VALUES(sort_order),
+            enabled = VALUES(enabled),
+            data = VALUES(data)
+    ]], {
+        kind,
+        row.id,
+        row.label,
+        row.sort or 0,
+        row.enabled == false and 0 or 1,
+        kind == 'category' and Shop.EncodeCategory(row) or Shop.EncodeTier(row),
+    })
+end
+
+function DB.DeleteShopMeta(kind, id)
+    MySQL.update.await('DELETE FROM dj_envydonator_shop_meta WHERE kind = ? AND meta_id = ?', { kind, id })
+end
+
+function DB.ReassignListingTier(oldTier, newTier)
+    MySQL.update.await('UPDATE dj_envydonator_listings SET tier = ? WHERE tier = ?', { newTier, oldTier })
+end
+
+function DB.CountListingsInCategory(category)
+    local row = MySQL.single.await('SELECT COUNT(*) AS n FROM dj_envydonator_listings WHERE category = ?', { category })
+    return row and tonumber(row.n) or 0
+end
+
+function DB.CountListingsInTier(tier)
+    local row = MySQL.single.await('SELECT COUNT(*) AS n FROM dj_envydonator_listings WHERE tier = ?', { tier })
+    return row and tonumber(row.n) or 0
+end
+
 function DB.EnsureSchema()
     DB.EnsureListingsTable()
+    DB.EnsureShopMetaTable()
     pcall(function()
         MySQL.query.await('ALTER TABLE dj_envydonator_purchases ADD COLUMN refunded TINYINT(1) NOT NULL DEFAULT 0')
     end)
@@ -244,10 +325,18 @@ function DB.EnsureSchema()
         MySQL.query.await('ALTER TABLE dj_envydonator_codes MODIFY `code` VARCHAR(64) NOT NULL')
     end)
     pcall(function()
+        MySQL.query.await('ALTER TABLE dj_envydonator_listings MODIFY `tier` VARCHAR(40) DEFAULT NULL')
+        MySQL.query.await('ALTER TABLE dj_envydonator_owned MODIFY `tier` VARCHAR(40) DEFAULT NULL')
+        MySQL.query.await('ALTER TABLE dj_envydonator_purchases MODIFY `tier` VARCHAR(40) DEFAULT NULL')
+    end)
+    pcall(function()
         MySQL.update.await("UPDATE dj_envydonator_listings SET tier = 'emerald' WHERE LOWER(tier) = 'bronze'")
         MySQL.update.await("UPDATE dj_envydonator_listings SET tier = 'sapphire' WHERE LOWER(tier) = 'silver'")
         MySQL.update.await("UPDATE dj_envydonator_listings SET tier = 'blackdiamond' WHERE LOWER(tier) IN ('gold', 'black_diamond', 'black diamond', 'diamond')")
     end)
+    DB.SeedShopMeta()
+    Shop.Apply(DB.GetShopMeta('category'), DB.GetShopMeta('tier'))
+    TiersRefresh()
 end
 
 function DB.GetListings()

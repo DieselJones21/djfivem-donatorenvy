@@ -1,20 +1,32 @@
 --[[
     Live shop catalog. Built-in listings are empty on purpose — admins add
-    vehicles, weapons, extras, bundles, gangs, exclusives, and limited drops
-    in-game from the Admin tab (stored in dj_envydonator_listings).
+    vehicles, weapons, extras, bundles, gangs, exclusives, limited drops, and
+    custom tabs in-game from the Admin tab (stored in dj_envydonator_listings).
 ]]
 
 function CatalogReset()
     Catalog = {
-        vehicles = EmptyTierBuckets(),
-        weapons = {},
-        extras = {},
-        bundles = {},
         pets = {},
-        exclusives = {},
-        limited = {},
-        gangs = {},
     }
+    local categories = Shop and Shop.AllCategories and Shop.AllCategories() or {}
+    if #categories == 0 then
+        Catalog.vehicles = EmptyTierBuckets()
+        Catalog.weapons = {}
+        Catalog.extras = {}
+        Catalog.bundles = {}
+        Catalog.exclusives = {}
+        Catalog.limited = {}
+        Catalog.gangs = {}
+        return
+    end
+    for i = 1, #categories do
+        local cat = categories[i]
+        if cat.usesTiers then
+            Catalog[cat.id] = EmptyTierBuckets()
+        else
+            Catalog[cat.id] = {}
+        end
+    end
 end
 
 CatalogReset()
@@ -24,31 +36,35 @@ function CatalogPut(item)
         return
     end
     local category = item.category or 'extras'
-    if category == 'vehicles' then
+    if category == 'pets' then
+        Catalog.pets = Catalog.pets or {}
+        Catalog.pets[#Catalog.pets + 1] = item
+        return
+    end
+    if Shop and Shop.UsesTiers and Shop.UsesTiers(category) then
         local tier = NormalizeTier(item.tier)
         item.tier = tier
-        if not Catalog.vehicles[tier] then
-            Catalog.vehicles[tier] = {}
+        Catalog[category] = Catalog[category] or EmptyTierBuckets()
+        if not Catalog[category][tier] then
+            Catalog[category][tier] = {}
         end
-        Catalog.vehicles[tier][#Catalog.vehicles[tier] + 1] = item
+        Catalog[category][tier][#Catalog[category][tier] + 1] = item
         return
     end
     if category == 'weapons' then
         item.tier = nil
-        Catalog.weapons = Catalog.weapons or {}
-        Catalog.weapons[#Catalog.weapons + 1] = item
-        return
     end
-    if Catalog[category] then
-        Catalog[category][#Catalog[category] + 1] = item
-    else
-        Catalog.extras[#Catalog.extras + 1] = item
+    Catalog[category] = Catalog[category] or {}
+    if type(Catalog[category]) == 'table' and Catalog[category][1] == nil and next(Catalog[category]) then
+        -- leftover bucket table; treat as list
+        Catalog[category] = {}
     end
+    Catalog[category][#Catalog[category] + 1] = item
 end
 
 function CatalogAll()
     local out = {}
-    local function take(list, category, tier)
+    local function takeList(list, category, tier)
         if not list then
             return
         end
@@ -62,16 +78,43 @@ function CatalogAll()
             out[#out + 1] = copy
         end
     end
-    for _, tier in ipairs(Tiers.ids) do
-        take(Catalog.vehicles[tier], 'vehicles', tier)
+    local function takeCategory(category)
+        local bucket = Catalog[category]
+        if not bucket then
+            return
+        end
+        if Shop and Shop.UsesTiers and Shop.UsesTiers(category) then
+            local tiers = Shop.EnabledTiers and Shop.EnabledTiers() or {}
+            local seen = {}
+            for i = 1, #tiers do
+                local id = tiers[i].id
+                seen[id] = true
+                takeList(bucket[id], category, id)
+            end
+            for tier, list in pairs(bucket) do
+                if type(list) == 'table' and not seen[tier] then
+                    takeList(list, category, tier)
+                end
+            end
+            return
+        end
+        takeList(bucket, category)
     end
-    take(Catalog.weapons, 'weapons')
-    take(Catalog.extras, 'extras')
-    take(Catalog.bundles, 'bundles')
-    take(Catalog.pets, 'pets')
-    take(Catalog.exclusives, 'exclusives')
-    take(Catalog.limited, 'limited')
-    take(Catalog.gangs, 'gangs')
+    local categories = Shop and Shop.AllCategories and Shop.AllCategories() or {}
+    if #categories == 0 then
+        takeCategory('vehicles')
+        takeCategory('weapons')
+        takeCategory('extras')
+        takeCategory('bundles')
+        takeCategory('exclusives')
+        takeCategory('limited')
+        takeCategory('gangs')
+    else
+        for i = 1, #categories do
+            takeCategory(categories[i].id)
+        end
+    end
+    takeList(Catalog.pets, 'pets')
     return out
 end
 
