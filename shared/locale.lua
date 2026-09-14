@@ -1,5 +1,5 @@
 Locale = {
-    menu_title = 'Envy Roleplay Donator',
+    menu_title = '305 Donator',
     currency = 'Gems',
     open_hint = 'F11 (Minimize Menu)',
     not_enough = 'You do not have enough Gems.',

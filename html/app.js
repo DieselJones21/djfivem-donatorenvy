@@ -17,7 +17,7 @@ const ICONS = {
 
 const GEM = '<svg class="gem" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 7-8 13L4 9l8-7zm0 3.2L7.2 9h9.6L12 5.2z"/></svg>';
 
-const THEMES = ['envy', 'miami', 'rebel', 'crimson', 'ocean', 'gold', 'emerald', 'violet'];
+const THEMES = ['miami', 'envy', 'rebel', 'crimson', 'ocean', 'gold', 'emerald', 'violet'];
 const DEFAULT_CATEGORIES = [
     { id: 'vehicles', label: 'Vehicles', grantType: 'vehicle', usesTiers: true, gated: 'none', timed: false, builtin: true, enabled: true, sort: 10 },
     { id: 'weapons', label: 'Weapons', grantType: 'weapon', usesTiers: false, gated: 'none', timed: false, builtin: true, enabled: true, sort: 20 },
@@ -99,7 +99,7 @@ function tierLabel(tier) {
 }
 
 function normalizeTheme(name) {
-    return THEMES.includes(name) ? name : 'envy';
+    return THEMES.includes(name) ? name : 'miami';
 }
 
 const state = {
@@ -114,10 +114,10 @@ const state = {
     lookup: null,
     players: [],
     currency: { name: 'Gems', short: 'Gems' },
-    serverName: 'Envy Roleplay',
+    serverName: '305',
     keybind: 'F11',
     locale: {},
-    theme: 'envy',
+    theme: 'miami',
     isGangMember: false,
     gangTabLabel: 'Gang Store',
     categories: DEFAULT_CATEGORIES,
@@ -265,7 +265,7 @@ function mockShopLayout() {
             { id: 'ruby', label: 'Ruby', builtin: false, enabled: true, sort: 40 },
         ],
         tebex: {
-            storeUrl: 'https://envyroleplay.tebex.io',
+            storeUrl: 'https://305.tebex.io',
             playerRedeem: 'redeem',
             commands: [
                 { id: 'gems_redeem', title: 'Gems pack (player pastes tbx- ID)', command: 'tbxgems {transaction} 500' },
@@ -285,7 +285,7 @@ function mockOpen() {
     state.admin = { ...(state.admin || {}), categories: layout.categories, tiers: layout.tiers, tebex: layout.tebex };
     return {
         ok: true,
-        serverName: 'Envy Roleplay',
+        serverName: '305',
         keybind: 'F11',
         currency: { name: 'Gems', short: 'Gems' },
         isGangMember: true,
@@ -316,7 +316,7 @@ function mockOpen() {
             ],
         },
         catalog: previewCatalog(),
-        theme: 'envy',
+        theme: 'miami',
         players: [
             { id: 1, name: 'MoodyNewt8638' },
             { id: 12, name: 'NightGuest' },
@@ -689,7 +689,7 @@ function renderHeader() {
                 <div class="name">${escapeHtml(p.name || 'Unknown')}</div>
                 <div class="role">${p.isAdmin ? 'Admin' : 'Member'}</div>
             </div>
-            <div class="avatar">3</div>
+            <div class="avatar">305</div>
         `;
     }
     const shop = document.getElementById('modeShop');
@@ -918,17 +918,17 @@ function renderDashboard() {
         <section class="panel">
             <div class="hero">
                 <div class="hero-banner">
-                    <img src="images/envy-roleplay.webp" alt="Envy Roleplay" />
+                    <img src="images/its-305.webp" alt="It's 305" />
                     <div class="veil"></div>
                     <div class="hero-copy">
-                        <h2>Envy Store</h2>
+                        <h2>305 Store</h2>
                         <p>Spend Gems on rides, weapons, and packs. Buy Gems on Tebex, then redeem your Payment ID (tbx-xxxxxxxx) here.</p>
                         <button class="btn add" data-goto="${liveCategories().find((c) => c.grantType === 'vehicle')?.id || liveCategories()[0]?.id || 'dashboard'}">Shop now →</button>
                     </div>
                 </div>
                 <div class="member-card">
-                    <div class="kicker">ENVY STATUS</div>
-                    <h3>${escapeHtml(p.name || 'Envy')}</h3>
+                    <div class="kicker">305 STATUS</div>
+                    <h3>${escapeHtml(p.name || '305')}</h3>
                     <div class="sub">${p.isAdmin ? 'Admin' : 'Member'} • ${formatCoins(p.coins)} ${state.currency.short}</div>
                     <div class="progress"><span style="width:${progress}%"></span></div>
                     <div class="stat-mini"><span>Owned ${owned}</span><span>Spent ${formatCoins(p.lifetimeSpent || 0)} ${state.currency.short}</span></div>

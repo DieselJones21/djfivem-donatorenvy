@@ -1,6 +1,6 @@
-# Envy Roleplay Donator (`djfivem-donatorenvy`)
+# 305 Donator (`djfivem-donatorenvy`)
 
-FiveM donator store for **Envy Roleplay**, based on `djfivem-305donator`, with **Gems**, a neon cyan / chrome shop UI, Tebex game commands, custom shop tabs, custom vehicle tiers, oxmysql persistence, and an optional Discord gang tab.
+FiveM donator store for **It's 305**, with a **Miami Vice** pink/cyan shop UI, **Gems**, Tebex game commands, custom shop tabs, custom vehicle tiers, oxmysql persistence, and an optional Discord gang tab.
 
 Open with **F11** or `/donator`.
 
@@ -269,13 +269,13 @@ Players must have Discord linked in FiveM (they do if they join through Discord)
 Set the default look in `config.lua`:
 
 ```lua
-Config.Theme = 'envy' -- envy | miami | rebel | crimson | ocean | gold | emerald | violet
+Config.Theme = 'miami' -- miami | envy | rebel | crimson | ocean | gold | emerald | violet
 ```
 
 | Theme | Accent |
 |---|---|
-| `envy` | Envy Roleplay — neon cyan / chrome / black (default) |
-| `miami` | Hot pink / cyan |
+| `miami` | It's 305 — hot pink / cyan / palms (default) |
+| `envy` | Neon cyan / chrome / black |
 | `rebel` | Red / white / blue |
 | `crimson` | Racing red |
 | `ocean` | Cyan / blue |

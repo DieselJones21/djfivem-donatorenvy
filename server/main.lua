@@ -441,7 +441,7 @@ RegisterDonatorCallback('open', function(source)
         currency = { name = Config.CurrencyName, short = Config.CurrencyShort },
         serverName = Config.ServerName,
         keybind = Config.Keybind,
-        theme = Config.Theme or 'envy',
+        theme = Config.Theme or 'miami',
         isGangMember = isGangMember,
         gangTabLabel = (Shop.GetCategory('gangs') and Shop.GetCategory('gangs').label)
             or (Discord and Discord.TabLabel())
@@ -758,7 +758,7 @@ RegisterDonatorCallback('adminCreateCode', function(source, payload)
     local actorId, actorName = Framework.GetIdentifier(source)
     local code = tostring(payload.code or ''):gsub('%s+', ''):upper()
     if code == '' then
-        code = ('ENVY%04d'):format(math.random(0, 9999))
+        code = ('305X%04d'):format(math.random(0, 9999))
     end
     local coins = sanitizeAmount(payload.coins, true) or 0
     local maxUses = math.floor(tonumber(payload.maxUses) or 1)
@@ -1239,7 +1239,7 @@ end, true)
 RegisterCommand('tebexcmds', function(src)
     if not ensureAdmin(src) then return end
     local help = tebexHelp()
-    print('--- Envy Donator Tebex commands ---')
+    print('--- 305 Donator Tebex commands ---')
     print('Put these in the Tebex package Game Server Commands box:')
     for i = 1, #help.commands do
         print(('  %s'):format(help.commands[i].command))
