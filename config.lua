@@ -3,7 +3,7 @@ Config = {}
 -- Menu
 Config.Command = 'donator'
 Config.Keybind = 'F11'
-Config.KeybindDescription = 'Open Envy Roleplay Donator Store'
+Config.KeybindDescription = 'Open 305 Donator Store'
 Config.CloseKey = 'Escape'
 
 -- Currency
@@ -135,7 +135,7 @@ Config.Tebex = {
     GivePackageCommand = 'givepackage',
     PackageRedeemCommand = 'tbxpackage',
     PlayerRedeemCommand = 'redeem',
-    StoreUrl = '', -- e.g. https://envyroleplay.tebex.io
+    StoreUrl = '', -- e.g. https://yourstore.tebex.io
 }
 
 --[[
@@ -177,16 +177,16 @@ Config.Webhooks = {
 }
 
 Config.WebhookColor = {
-    purchase = 58879,    -- neon cyan #00E5FF
-    coins = 16777215,    -- white / chrome
-    admin = 11184810,    -- silver
+    purchase = 16723349, -- hot pink #FF2D95
+    coins = 58879,       -- cyan #00E5FF
+    admin = 16745208,    -- pink #FF7AD8
     error = 0,           -- black
 }
 
-Config.ServerName = 'Envy Roleplay'
+Config.ServerName = '305'
 
--- Shop color theme (config only — no in-UI picker): envy | miami | rebel | crimson | ocean | gold | emerald | violet
-Config.Theme = 'envy'
+-- Shop color theme (config only — no in-UI picker): miami | envy | rebel | crimson | ocean | gold | emerald | violet
+Config.Theme = 'miami'
 
 -- Notifications: 'auto' | 'ox' | 'esx' | 'qb' | 'native'
 Config.Notify = 'auto'

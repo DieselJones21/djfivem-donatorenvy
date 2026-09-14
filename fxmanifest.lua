@@ -4,8 +4,8 @@ lua54 'yes'
 
 name 'djfivem-donatorenvy'
 author 'DieselJones21'
-description 'Envy Roleplay donator store with Gems, Tebex commands, custom tabs, vehicle tiers, ox_inventory, and JG garages'
-version '1.9.0'
+description '305 Miami donator store with Gems, Tebex commands, custom tabs, vehicle tiers, ox_inventory, and JG garages'
+version '1.9.1'
 
 shared_scripts {
     'config.lua',

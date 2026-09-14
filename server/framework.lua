@@ -230,7 +230,7 @@ end
 
 local function randomPlate()
     local chars = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
-    local plate = 'ENVY'
+    local plate = '305'
     for _ = 1, 4 do
         local idx = math.random(1, #chars)
         plate = plate .. chars:sub(idx, idx)

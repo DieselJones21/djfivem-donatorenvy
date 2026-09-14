@@ -169,7 +169,7 @@ RegisterNetEvent('djfivem-donatorenvy:client:spawnVehicle', function(model, plat
     end
     local spawn = Config.StandaloneVehicleSpawn
     local veh = CreateVehicle(hash, spawn.x, spawn.y, spawn.z, spawn.w, true, true)
-    SetVehicleNumberPlateText(veh, plate or 'ENVY')
+    SetVehicleNumberPlateText(veh, plate or '305')
     SetPedIntoVehicle(PlayerPedId(), veh, -1)
     SetVehicleOnGroundProperly(veh)
     SetEntityAsMissionEntity(veh, true, true)

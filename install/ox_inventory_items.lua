@@ -13,12 +13,12 @@
 
 return {
     ['donator_plate'] = {
-        label = 'Envy Plate Pass',
+        label = '305 Plate Pass',
         weight = 10,
         stack = false,
         close = true,
         consume = 0,
-        description = 'Donator plate pass from the Envy Roleplay store.',
+        description = 'Donator plate pass from the 305 store.',
         client = {
             image = 'nui://djfivem-donatorenvy/html/images/donator_plate.png',
         },
@@ -29,7 +29,7 @@ return {
         stack = false,
         close = true,
         consume = 0,
-        description = 'Keycard for the Envy Roleplay penthouse interior.',
+        description = 'Keycard for the 305 penthouse interior.',
         client = {
             image = 'nui://djfivem-donatorenvy/html/images/penthouse_card.png',
         },
